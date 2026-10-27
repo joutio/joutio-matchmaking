@@ -1,0 +1,92 @@
+package com.joutio.matchmaking.application.projection;
+
+import com.joutio.matchmaking.domain.event.ChallengeEvent;
+import com.joutio.matchmaking.domain.model.Challenge;
+import com.joutio.matchmaking.domain.model.ChallengeRoomId;
+import com.joutio.matchmaking.domain.model.ChallengeStatus;
+import com.joutio.matchmaking.domain.port.out.ChallengeRepositoryPort;
+import org.axonframework.config.ProcessingGroup;
+import org.axonframework.eventhandling.EventHandler;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.function.UnaryOperator;
+
+/**
+ * Projection read-only du défi nominatif (intention asynchrone) : réponse et lien vers la salle.
+ */
+@Component
+@ProcessingGroup("challenge-projection")
+public class ChallengeProjection {
+
+    private final ChallengeRepositoryPort challengeRepositoryPort;
+
+    public ChallengeProjection(ChallengeRepositoryPort challengeRepositoryPort) {
+        this.challengeRepositoryPort = challengeRepositoryPort;
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengeCreatedEvent event) {
+        challengeRepositoryPort.save(Challenge.builder()
+                .challengeId(event.challengeId())
+                .topicId(event.topicId())
+                .challengerId(event.challengerId())
+                .opponentId(event.opponentId())
+                .gameId(event.gameId())
+                .status(ChallengeStatus.PENDING)
+                .createdAt(event.createdAt())
+                .expiresAt(event.expiresAt())
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengeAcceptedEvent event) {
+        update(event.challengeId(), challenge -> challenge.toBuilder()
+                .status(ChallengeStatus.ACCEPTED)
+                .resolvedAt(event.acceptedAt())
+                .roomId(ChallengeRoomId.of(event.challengeId()))
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengeDeclinedEvent event) {
+        update(event.challengeId(), challenge -> challenge.toBuilder()
+                .status(ChallengeStatus.DECLINED)
+                .resolvedAt(event.declinedAt())
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengeCancelledEvent event) {
+        update(event.challengeId(), challenge -> challenge.toBuilder()
+                .status(ChallengeStatus.CANCELLED)
+                .resolvedAt(event.cancelledAt())
+                .build());
+    }
+
+    /**
+     * Un défi expiré disparaît **immédiatement** de la section Défis : la ligne est supprimée du
+     * read model (les lectures tardives répondent 404). La purge de l'agrégat reste portée par la
+     * saga (rétention interne, non exposée).
+     */
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengeExpiredEvent event) {
+        challengeRepositoryPort.deleteById(event.challengeId());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengePurgedEvent event) {
+        challengeRepositoryPort.deleteById(event.challengeId());
+    }
+
+    private void update(String challengeId, UnaryOperator<Challenge> transform) {
+        challengeRepositoryPort.findById(challengeId).ifPresent(challenge ->
+                challengeRepositoryPort.save(transform.apply(challenge)));
+    }
+}

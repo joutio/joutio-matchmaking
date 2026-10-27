@@ -1,0 +1,90 @@
+package com.joutio.matchmaking.application.projection;
+
+import com.joutio.matchmaking.domain.event.ChallengeEvent;
+import com.joutio.matchmaking.domain.model.Challenge;
+import com.joutio.matchmaking.domain.model.ChallengeRoomId;
+import com.joutio.matchmaking.domain.model.ChallengeStatus;
+import com.joutio.matchmaking.domain.port.out.ChallengeRepositoryPort;
+import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+
+import java.time.Instant;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class ChallengeProjectionTest {
+
+    private static final Instant AT = Instant.parse("2026-10-05T10:00:00Z");
+
+    private final ChallengeRepositoryPort repository = mock(ChallengeRepositoryPort.class);
+    private final ChallengeProjection projection = new ChallengeProjection(repository);
+
+    @Test
+    void created_savesPendingChallenge() {
+        projection.on(new ChallengeEvent.ChallengeCreatedEvent(
+                "challenge-1", "topic-1", "challenger-1", "opponent-1", null, AT.plusSeconds(3600), AT));
+
+        ArgumentCaptor<Challenge> captor = ArgumentCaptor.forClass(Challenge.class);
+        verify(repository).save(captor.capture());
+        Challenge saved = captor.getValue();
+        assertThat(saved.status()).isEqualTo(ChallengeStatus.PENDING);
+        assertThat(saved.opponentId()).isEqualTo("opponent-1");
+        assertThat(saved.resolvedAt()).isNull();
+        assertThat(saved.roomId()).isNull();
+        assertThat(saved.gameId()).isNull();
+    }
+
+    @Test
+    void created_rematchStoresSourceGameId() {
+        projection.on(new ChallengeEvent.ChallengeCreatedEvent(
+                "challenge-1", "topic-1", "challenger-1", "opponent-1", "game-1", AT.plusSeconds(3600), AT));
+
+        ArgumentCaptor<Challenge> captor = ArgumentCaptor.forClass(Challenge.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().gameId()).isEqualTo("game-1");
+    }
+
+    @Test
+    void accepted_marksResolvedAndDerivesRoomLink() {
+        when(repository.findById("challenge-1")).thenReturn(Optional.of(challenge()));
+
+        projection.on(new ChallengeEvent.ChallengeAcceptedEvent(
+                "challenge-1", "topic-1", "challenger-1", "opponent-1", AT));
+
+        ArgumentCaptor<Challenge> captor = ArgumentCaptor.forClass(Challenge.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().status()).isEqualTo(ChallengeStatus.ACCEPTED);
+        assertThat(captor.getValue().resolvedAt()).isEqualTo(AT);
+        assertThat(captor.getValue().roomId()).isEqualTo(ChallengeRoomId.of("challenge-1"));
+    }
+
+    @Test
+    void expired_deletesChallengeImmediately() {
+        projection.on(new ChallengeEvent.ChallengeExpiredEvent("challenge-1", AT));
+
+        verify(repository).deleteById("challenge-1");
+    }
+
+    @Test
+    void purged_deletesChallenge() {
+        projection.on(new ChallengeEvent.ChallengePurgedEvent("challenge-1", AT));
+
+        verify(repository).deleteById("challenge-1");
+    }
+
+    private static Challenge challenge() {
+        return Challenge.builder()
+                .challengeId("challenge-1")
+                .topicId("topic-1")
+                .challengerId("challenger-1")
+                .opponentId("opponent-1")
+                .status(ChallengeStatus.PENDING)
+                .createdAt(AT)
+                .expiresAt(AT.plusSeconds(3600))
+                .build();
+    }
+}

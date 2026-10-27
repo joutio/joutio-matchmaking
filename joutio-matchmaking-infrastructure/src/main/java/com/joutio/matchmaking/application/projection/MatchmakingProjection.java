@@ -1,0 +1,94 @@
+package com.joutio.matchmaking.application.projection;
+
+import com.joutio.matchmaking.domain.event.MatchmakingEvent;
+import com.joutio.matchmaking.domain.model.Matchmaking;
+import com.joutio.matchmaking.domain.model.MatchmakingStatus;
+import com.joutio.matchmaking.domain.port.out.MatchmakingRepositoryPort;
+import org.axonframework.config.ProcessingGroup;
+import org.axonframework.eventhandling.EventHandler;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.function.UnaryOperator;
+
+/**
+ * Read model « ticket » d'appariement (vue produit) ; sert aussi d'index au pool
+ * ({@code status = SEARCHING}, {@code claimed_by} null).
+ */
+@Component
+@ProcessingGroup("matchmaking-projection")
+public class MatchmakingProjection {
+
+    private final MatchmakingRepositoryPort repository;
+
+    public MatchmakingProjection(MatchmakingRepositoryPort repository) {
+        this.repository = repository;
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(MatchmakingEvent.MatchmakingStartedEvent event) {
+        repository.save(Matchmaking.builder()
+                .matchmakingId(event.matchmakingId())
+                .playerId(event.playerId())
+                .topicId(event.topicId())
+                .rating(event.rating())
+                .languages(event.languages())
+                .vsBot(false)
+                .status(MatchmakingStatus.SEARCHING)
+                .createdAt(event.startedAt())
+                .deadlineAt(event.deadlineAt())
+                .updatedAt(event.startedAt())
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(MatchmakingEvent.MatchmakingMatchedEvent event) {
+        update(event.matchmakingId(), matchmaking -> matchmaking.toBuilder()
+                .status(MatchmakingStatus.COMPLETED)
+                .opponentId(event.opponentId())
+                .roomId(event.roomId())
+                .vsBot(event.vsBot())
+                .updatedAt(event.matchedAt())
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(MatchmakingEvent.MatchmakingCancelledEvent event) {
+        update(event.matchmakingId(), matchmaking -> matchmaking.toBuilder()
+                .status(MatchmakingStatus.CANCELLED)
+                .updatedAt(event.cancelledAt())
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(MatchmakingEvent.MatchmakingFailedEvent event) {
+        update(event.matchmakingId(), matchmaking -> matchmaking.toBuilder()
+                .status(MatchmakingStatus.FAILED)
+                .updatedAt(event.failedAt())
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(MatchmakingEvent.MatchmakingExpiredEvent event) {
+        update(event.matchmakingId(), matchmaking -> matchmaking.toBuilder()
+                .status(MatchmakingStatus.EXPIRED)
+                .updatedAt(event.expiredAt())
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(MatchmakingEvent.MatchmakingPurgedEvent event) {
+        repository.deleteById(event.matchmakingId());
+    }
+
+    private void update(String matchmakingId, UnaryOperator<Matchmaking> transform) {
+        repository.findById(matchmakingId).ifPresent(matchmaking ->
+                repository.save(transform.apply(matchmaking)));
+    }
+}

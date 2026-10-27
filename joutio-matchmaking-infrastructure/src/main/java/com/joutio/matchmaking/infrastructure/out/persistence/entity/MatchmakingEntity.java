@@ -1,0 +1,64 @@
+package com.joutio.matchmaking.infrastructure.out.persistence.entity;
+
+import com.joutio.matchmaking.domain.model.MatchmakingStatus;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
+
+import java.time.Instant;
+
+/**
+ * Index de recherche d'appariement (pool) doublé du read model « ticket » produit.
+ */
+@Setter
+@Getter
+@Entity
+@Table(name = "matchmaking_entry", indexes = {
+        @Index(name = "idx_matchmaking_pool", columnList = "topic_id, status, rating, created_at"),
+        @Index(name = "idx_matchmaking_player", columnList = "player_id")
+})
+public class MatchmakingEntity {
+
+    @Id
+    @Column(name = "matchmaking_id", nullable = false)
+    private String matchmakingId;
+
+    @Column(name = "player_id", nullable = false)
+    private String playerId;
+
+    @Column(name = "topic_id", nullable = false)
+    private String topicId;
+
+    @Column(name = "rating", nullable = false)
+    private int rating;
+
+    /** Langues requises, codes ISO 639-1 séparés par des virgules (ex. {@code fr,en}). */
+    @Column(name = "languages", nullable = false, length = 64)
+    private String languages;
+
+    @Column(name = "opponent_id")
+    private String opponentId;
+
+    @Column(name = "room_id")
+    private String roomId;
+
+    @Column(name = "vs_bot", nullable = false)
+    private boolean vsBot;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
+    private MatchmakingStatus status;
+
+    @Column(name = "claimed_by")
+    private String claimedBy;
+
+    @Column(name = "created_at", nullable = false)
+    private Instant createdAt;
+
+    /** Échéance de la fenêtre de recherche (10 s), exposée au client pour le compte à rebours. */
+    @Column(name = "deadline_at", nullable = false)
+    private Instant deadlineAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+}

@@ -1,0 +1,101 @@
+package com.joutio.matchmaking.domain.aggregate;
+
+import com.joutio.axon.test.JoutioAxonMatchers;
+import com.joutio.matchmaking.domain.command.MatchmakingCommand;
+import com.joutio.matchmaking.domain.event.MatchmakingEvent;
+import com.joutio.matchmaking.domain.model.TopicLanguageCoverage;
+import com.joutio.microservice.core.domain.model.i18n.Language;
+import org.axonframework.test.aggregate.AggregateTestFixture;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Test Axon in-memory de {@link MatchmakingAggregate} (recherche d'appariement public).
+ */
+class MatchmakingAggregateTest {
+
+    private static final String MM_ID = "mm-1";
+    private static final String PLAYER = "player-1";
+    private static final String TOPIC = "topic-1";
+
+    private static final TopicLanguageCoverage COVERAGE = new TopicLanguageCoverage(List.of(
+            new TopicLanguageCoverage.LanguageCoverage(Set.of(Language.FR), 10),
+            new TopicLanguageCoverage.LanguageCoverage(Set.of(Language.EN), 8),
+            new TopicLanguageCoverage.LanguageCoverage(Set.of(Language.FR, Language.EN), 7)));
+
+    private final AggregateTestFixture<MatchmakingAggregate> fixture =
+            new AggregateTestFixture<>(MatchmakingAggregate.class);
+
+    @Test
+    void create_appliesStartedEvent() {
+        fixture.givenNoPriorActivity()
+                .when(new MatchmakingCommand.CreateMatchmakingCommand(
+                        MM_ID, PLAYER, TOPIC, 10, Set.of(Language.FR), COVERAGE))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        MatchmakingEvent.MatchmakingStartedEvent.class,
+                        e -> ((MatchmakingEvent.MatchmakingStartedEvent) e).matchmakingId().equals(MM_ID)
+                                && COVERAGE.equals(((MatchmakingEvent.MatchmakingStartedEvent) e).topicCoverage())));
+    }
+
+    @Test
+    void match_appliesMatchedEvent() {
+        fixture.given(started())
+                .when(new MatchmakingCommand.MarkMatchmakingMatchedCommand(MM_ID, "opponent-1", "room-1", false))
+                .expectEventsMatching(JoutioAxonMatchers.hasPayloadMatching(
+                        MatchmakingEvent.MatchmakingMatchedEvent.class,
+                        e -> "room-1".equals(((MatchmakingEvent.MatchmakingMatchedEvent) e).roomId())));
+    }
+
+    @Test
+    void matchIsIdempotentForSameRoom() {
+        fixture.given(started(), matched())
+                .when(new MatchmakingCommand.MarkMatchmakingMatchedCommand(MM_ID, "opponent-1", "room-1", false))
+                .expectNoEvents();
+    }
+
+    @Test
+    void cancelIsIgnoredAfterMatch() {
+        fixture.given(started(), matched())
+                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER))
+                .expectNoEvents();
+    }
+
+    @Test
+    void cancel_appliesCancelledEvent() {
+        fixture.given(started())
+                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER))
+                .expectEventsMatching(JoutioAxonMatchers.hasPayloadMatching(
+                        MatchmakingEvent.MatchmakingCancelledEvent.class,
+                        e -> ((MatchmakingEvent.MatchmakingCancelledEvent) e).matchmakingId().equals(MM_ID)));
+    }
+
+    @Test
+    void fail_appliesFailedEvent() {
+        fixture.given(started())
+                .when(new MatchmakingCommand.FailMatchmakingCommand(MM_ID, "MATCHMAKING_ERROR"))
+                .expectEventsMatching(JoutioAxonMatchers.hasPayloadMatching(
+                        MatchmakingEvent.MatchmakingFailedEvent.class,
+                        e -> ((MatchmakingEvent.MatchmakingFailedEvent) e).matchmakingId().equals(MM_ID)));
+    }
+
+    @Test
+    void purge_leavesAggregateDeleted_soItCannotBeReloaded() {
+        fixture.given(started(), new MatchmakingEvent.MatchmakingPurgedEvent(MM_ID, java.time.Instant.now()))
+                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER))
+                .expectException(org.axonframework.modelling.command.AggregateNotFoundException.class);
+    }
+
+    private static MatchmakingEvent.MatchmakingStartedEvent started() {
+        java.time.Instant now = java.time.Instant.now();
+        return new MatchmakingEvent.MatchmakingStartedEvent(
+                MM_ID, PLAYER, TOPIC, 10, Set.of(Language.FR), COVERAGE, now,
+                now.plus(java.time.Duration.ofSeconds(10)));
+    }
+
+    private static MatchmakingEvent.MatchmakingMatchedEvent matched() {
+        return new MatchmakingEvent.MatchmakingMatchedEvent(
+                MM_ID, "opponent-1", "room-1", false, java.time.Instant.now());
+    }
+}

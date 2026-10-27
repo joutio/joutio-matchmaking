@@ -1,0 +1,66 @@
+package com.joutio.matchmaking.domain.command;
+
+import org.axonframework.modelling.command.TargetAggregateIdentifier;
+
+/**
+ * Commandes du défi nominatif (intention asynchrone). {@code gameId} référence — quand il est
+ * renseigné — la <b>partie terminée d'origine</b> d'une revanche (jamais la future partie, qui
+ * naîtra de la salle) ; {@code null} pour un défi normal.
+ */
+public interface ChallengeCommand {
+
+    String challengeId();
+
+    /** A défie B sur un sujet ; la salle n'est créée qu'à l'acceptation. */
+    record CreateChallengeCommand(
+            @TargetAggregateIdentifier String challengeId,
+            String topicId,
+            String challengerId,
+            String opponentId,
+            String gameId
+    ) implements ChallengeCommand {
+    }
+
+    /** B accepte : la salle temps réel est créée par la saga. */
+    record AcceptChallengeCommand(
+            @TargetAggregateIdentifier String challengeId,
+            String playerId
+    ) implements ChallengeCommand {
+    }
+
+    /** B refuse. */
+    record DeclineChallengeCommand(
+            @TargetAggregateIdentifier String challengeId,
+            String playerId
+    ) implements ChallengeCommand {
+    }
+
+    /** A annule son défi resté sans réponse. */
+    record CancelChallengeCommand(
+            @TargetAggregateIdentifier String challengeId,
+            String playerId
+    ) implements ChallengeCommand {
+    }
+
+    /** Commande interne (saga, deadline) : défi jamais accepté, expiré. */
+    record ExpireChallengeCommand(
+            @TargetAggregateIdentifier String challengeId
+    ) implements ChallengeCommand {
+    }
+
+    /**
+     * Commande interne (saga) : la **partie du défi a été créée** (salle issue de l'acceptation) —
+     * marque le défi comme ayant abouti sur un duel.
+     */
+    record StartChallengeCommand(
+            @TargetAggregateIdentifier String challengeId,
+            String gameId
+    ) implements ChallengeCommand {
+    }
+
+    /** Commande interne (saga, après rétention) : purge un défi terminal. */
+    record PurgeChallengeCommand(
+            @TargetAggregateIdentifier String challengeId
+    ) implements ChallengeCommand {
+    }
+}

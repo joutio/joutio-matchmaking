@@ -1,0 +1,172 @@
+package com.joutio.matchmaking.domain.aggregate;
+
+import com.joutio.matchmaking.domain.command.MatchmakingCommand;
+import com.joutio.matchmaking.domain.event.MatchmakingEvent;
+import com.joutio.matchmaking.domain.exception.MatchmakingExceptions;
+import com.joutio.matchmaking.domain.model.MatchmakingDeadline;
+import com.joutio.matchmaking.domain.model.MatchmakingStatus;
+import org.apache.commons.lang3.StringUtils;
+import org.axonframework.commandhandling.CommandHandler;
+import org.axonframework.eventsourcing.EventSourcingHandler;
+import org.axonframework.modelling.command.AggregateIdentifier;
+import org.axonframework.modelling.command.AggregateLifecycle;
+import org.axonframework.spring.stereotype.Aggregate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.time.Instant;
+
+import static org.axonframework.modelling.command.AggregateLifecycle.apply;
+
+/**
+ * MatchmakingAggregate — recherche d'un adversaire pour un duel public (« Défier le monde »).
+ * <p>
+ * File d'appariement pure : la saga associe deux recherches compatibles (même sujet, Elo proche,
+ * langues couvertes par le sujet) et crée une <b>salle</b> ; elle ne prépare ni ne crée jamais la
+ * partie (c'est le rôle de la salle). L'agrégat ne conserve que ce dont ses handlers ont besoin
+ * (identifiant, joueur, statut, salle) : les critères d'appariement (sujet, Elo, langues) et
+ * l'issue (adversaire, vsBot) vivent dans les événements, consommés par la saga et le read model.
+ */
+@Aggregate
+public class MatchmakingAggregate {
+
+    private static final Logger logger = LoggerFactory.getLogger(MatchmakingAggregate.class);
+
+    @AggregateIdentifier
+    private String matchmakingId;
+    private String playerId;
+    private MatchmakingStatus status;
+    private String roomId;
+
+    protected MatchmakingAggregate() {
+    }
+
+    @CommandHandler
+    public MatchmakingAggregate(MatchmakingCommand.CreateMatchmakingCommand command) {
+        requirePlayerId(command.playerId(), command.matchmakingId());
+        requireTopicId(command.topicId(), command.matchmakingId());
+        logger.info("Starting matchmaking: matchmakingId={}, playerId={}, topicId={}, rating={}",
+                command.matchmakingId(), command.playerId(), command.topicId(), command.rating());
+        Instant now = Instant.now();
+        apply(new MatchmakingEvent.MatchmakingStartedEvent(
+                command.matchmakingId(),
+                command.playerId(),
+                command.topicId(),
+                command.rating(),
+                command.languages(),
+                command.topicCoverage(),
+                now,
+                now.plus(MatchmakingDeadline.MATCHMAKING_DEADLINE_DURATION)));
+    }
+
+    @CommandHandler
+    public void handle(MatchmakingCommand.CancelMatchmakingCommand command) {
+        if (status != MatchmakingStatus.SEARCHING) {
+            return;
+        }
+        if (!command.playerId().equals(playerId)) {
+            throw new MatchmakingExceptions.PlayerNotInMatchmakingProblem(matchmakingId, command.playerId());
+        }
+        apply(new MatchmakingEvent.MatchmakingCancelledEvent(matchmakingId, "PLAYER_CANCELLED", Instant.now()));
+    }
+
+    @CommandHandler
+    public void handle(MatchmakingCommand.MarkMatchmakingMatchedCommand command) {
+        if (status == MatchmakingStatus.COMPLETED) {
+            if (command.roomId().equals(roomId)) {
+                return;
+            }
+            throw new MatchmakingExceptions.MatchmakingNotSearchingProblem(matchmakingId, status.name());
+        }
+        if (status != MatchmakingStatus.SEARCHING) {
+            throw new MatchmakingExceptions.MatchmakingNotSearchingProblem(matchmakingId, status.name());
+        }
+        logger.info("Matching: matchmakingId={}, opponentId={}, roomId={}, vsBot={}",
+                matchmakingId, command.opponentId(), command.roomId(), command.vsBot());
+        apply(new MatchmakingEvent.MatchmakingMatchedEvent(
+                matchmakingId,
+                command.opponentId(),
+                command.roomId(),
+                command.vsBot(),
+                Instant.now()));
+    }
+
+    /** Commande interne (saga, après rétention) : purge l'état terminal, l'agrégat est supprimé. */
+    @CommandHandler
+    public void handle(MatchmakingCommand.PurgeMatchmakingCommand command) {
+        logger.info("Purging matchmaking: matchmakingId={}", matchmakingId);
+        apply(new MatchmakingEvent.MatchmakingPurgedEvent(matchmakingId, Instant.now()));
+    }
+
+    @CommandHandler
+    public void handle(MatchmakingCommand.FailMatchmakingCommand command) {
+        if (status != MatchmakingStatus.SEARCHING) {
+            return;
+        }
+        logger.warn("Matchmaking failed: matchmakingId={}, reason={}", matchmakingId, command.reason());
+        apply(new MatchmakingEvent.MatchmakingFailedEvent(matchmakingId, command.reason(), Instant.now()));
+    }
+
+    /**
+     * Commande interne (saga, à l'échéance) : la fenêtre de recherche s'écoule sans adversaire.
+     * Le ticket s'arrête ({@code EXPIRED}) sans créer de salle — le client propose alors de
+     * relancer une recherche ou de basculer sur un entraînement contre un robot.
+     */
+    @CommandHandler
+    public void handle(MatchmakingCommand.ExpireMatchmakingCommand command) {
+        if (status != MatchmakingStatus.SEARCHING) {
+            return;
+        }
+        logger.info("Matchmaking expired without opponent: matchmakingId={}", matchmakingId);
+        apply(new MatchmakingEvent.MatchmakingExpiredEvent(matchmakingId, Instant.now()));
+    }
+
+    // ============================ Event Sourcing ============================
+
+    // ── Validateurs (requireXxx : nommés, appelés en tête de handler) ──
+
+    private static void requirePlayerId(String playerId, String matchmakingId) {
+        if (StringUtils.isBlank(playerId)) {
+            throw new MatchmakingExceptions.MissingPlayerIdentifierProblem(matchmakingId);
+        }
+    }
+
+    private static void requireTopicId(String topicId, String matchmakingId) {
+        if (StringUtils.isBlank(topicId)) {
+            throw new MatchmakingExceptions.MissingTopicIdentifierProblem(matchmakingId);
+        }
+    }
+
+    @EventSourcingHandler
+    public void on(MatchmakingEvent.MatchmakingStartedEvent event) {
+        this.matchmakingId = event.matchmakingId();
+        this.playerId = event.playerId();
+        this.status = MatchmakingStatus.SEARCHING;
+    }
+
+    @EventSourcingHandler
+    public void on(MatchmakingEvent.MatchmakingMatchedEvent event) {
+        this.status = MatchmakingStatus.COMPLETED;
+        this.roomId = event.roomId();
+    }
+
+    @EventSourcingHandler
+    public void on(MatchmakingEvent.MatchmakingCancelledEvent event) {
+        this.status = MatchmakingStatus.CANCELLED;
+    }
+
+    @EventSourcingHandler
+    public void on(MatchmakingEvent.MatchmakingExpiredEvent event) {
+        this.status = MatchmakingStatus.EXPIRED;
+    }
+
+    @EventSourcingHandler
+    public void on(MatchmakingEvent.MatchmakingFailedEvent event) {
+        this.status = MatchmakingStatus.FAILED;
+    }
+
+    @EventSourcingHandler
+    public void on(MatchmakingEvent.MatchmakingPurgedEvent event) {
+        AggregateLifecycle.markDeleted();
+    }
+}

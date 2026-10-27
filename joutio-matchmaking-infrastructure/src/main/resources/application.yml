@@ -1,0 +1,24 @@
+spring:
+  config:
+    import: optional:classpath:joutio-defaults.yml
+  profiles:
+    default: local
+  application:
+    name: joutio-matchmaking
+
+  flyway:
+    locations: classpath:db/migration/matchmaking
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+microservice:
+  swagger:
+    description: Joutio Matchmaking Module - Room-based player matching
+  websocket:
+    # Surface REST/WS portée par le BFF ; les services sont headless.
+    enabled: false
+
+

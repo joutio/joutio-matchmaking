@@ -1,0 +1,50 @@
+package com.joutio.matchmaking.infrastructure.out.persistence.repository;
+
+import com.joutio.matchmaking.infrastructure.out.persistence.entity.MatchmakingEntity;
+import org.springframework.data.domain.Limit;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.time.Instant;
+import java.util.List;
+
+@Repository
+public interface MatchmakingJpaRepository extends JpaRepository<MatchmakingEntity, String> {
+
+    @Query("""
+            select e from MatchmakingEntity e
+            where e.topicId = :topicId
+              and e.status = com.joutio.matchmaking.domain.model.MatchmakingStatus.SEARCHING
+              and e.claimedBy is null
+              and e.playerId <> :excludePlayerId
+              and e.rating between :minRating and :maxRating
+            order by abs(e.rating - :rating) asc, e.createdAt asc
+            """)
+    List<MatchmakingEntity> findCandidates(@Param("topicId") String topicId,
+                                           @Param("excludePlayerId") String excludePlayerId,
+                                           @Param("rating") int rating,
+                                           @Param("minRating") int minRating,
+                                           @Param("maxRating") int maxRating,
+                                           Limit limit);
+
+    /**
+     * Claim atomique du pool : ne réussit que si la recherche est encore SEARCHING et non
+     * réclamée. Le statut n'est pas modifié : la projection le passera à CLOSED à réception de
+     * {@code MatchmakingMatchedEvent}.
+     */
+    @Modifying
+    @Query("""
+            update MatchmakingEntity e
+            set e.claimedBy = :claimedBy,
+                e.updatedAt = :now
+            where e.matchmakingId = :matchmakingId
+              and e.status = com.joutio.matchmaking.domain.model.MatchmakingStatus.SEARCHING
+              and e.claimedBy is null
+            """)
+    int claim(@Param("matchmakingId") String matchmakingId,
+              @Param("claimedBy") String claimedBy,
+              @Param("now") Instant now);
+}
