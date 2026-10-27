@@ -1,3 +1,10 @@
+## 1.0.0 (2026-10-27)
+
+### Features
+
+* release Joutio matchmaking 1.0.0 ([d7b9bd9](https://github.com/joutio/joutio-matchmaking/commit/d7b9bd93e51ce795fc17f37210bff959934601c1))
+* release Joutio matchmaking 1.0.0 ([75b0406](https://github.com/joutio/joutio-matchmaking/commit/75b0406d79d728fddf59afd05124e3b9b20eee88))
+
 ## [12.0.0](https://github.com/joutio/joutio-matchmaking/compare/v11.6.1...v12.0.0) (2026-10-23)
 
 ### ⚠ BREAKING CHANGES
