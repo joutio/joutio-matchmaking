@@ -1,10 +1,10 @@
 package com.joutio.matchmaking.infrastructure.out.persistence.adapter;
 
 import com.joutio.matchmaking.domain.model.Room;
-import com.joutio.matchmaking.domain.model.RoomStatus;
 import com.joutio.matchmaking.domain.port.out.RoomRepositoryPort;
 import com.joutio.matchmaking.infrastructure.out.persistence.mapper.RoomEntityMapper;
 import com.joutio.matchmaking.infrastructure.out.persistence.repository.RoomJpaRepository;
+
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,9 +36,7 @@ public class RoomRepositoryAdapter implements RoomRepositoryPort {
     @Override
     @Transactional(readOnly = true)
     public List<Room> findWaitingByPlayerId(String playerId) {
-        return roomJpaRepository
-                .findByStatusAndPlayerId(RoomStatus.WAITING_PLAYERS, playerId, Instant.now())
-                .stream()
+        return roomJpaRepository.findOpenByPlayerId(playerId, Instant.now()).stream()
                 .map(RoomEntityMapper::toDomain)
                 .toList();
     }

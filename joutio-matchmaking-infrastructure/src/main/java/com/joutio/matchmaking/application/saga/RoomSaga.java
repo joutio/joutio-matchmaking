@@ -13,8 +13,10 @@ import com.joutio.matchmaking.domain.model.RoomPlayer;
 import com.joutio.matchmaking.domain.port.out.PlayedQuestionsPort;
 import com.joutio.matchmaking.domain.port.out.QuestionDrawPort;
 import com.joutio.microservice.core.domain.model.i18n.Language;
+
 import lombok.Getter;
 import lombok.Setter;
+
 import org.axonframework.commandhandling.gateway.CommandGateway;
 import org.axonframework.config.ProcessingGroup;
 import org.axonframework.deadline.DeadlineManager;
@@ -37,26 +39,26 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Orchestration de la salle temps réel — seul créateur de la partie (deux humains ou humain/bot).
+ *
  * <ul>
- *   <li>{@code RoomCreatedEvent} → expiration de la salle (1 jour). La présence du bot
- *       ({@code vsBot}) est appliquée par l'agrégat à la création (aucun join système côté saga).</li>
+ *   <li>{@code RoomCreatedEvent} → expiration de la salle (1 jour). La présence du bot ({@code
+ *       vsBot}) est appliquée par l'agrégat à la création (aucun join système côté saga).
  *   <li>{@code RoomEnteredEvent} → mémorise le participant <b>et son snapshot de profil</b>
- *       (préparé par la façade et porté par l'événement : aucune I/O de la saga pour les profils).</li>
- *   <li>{@code RoomAllPlayersPresentEvent} → les profils sont déjà connus, la saga avance le
- *       statut ({@code MarkRoomPlayersLoadedCommand}) ; {@code RoomPlayersLoadedEvent} → étape
- *       <b>historique des questions jouées</b> ({@link PlayedQuestionsPort}, non bloquant) ;
- *       {@code RoomPlayedQuestionsLoadedEvent} → étape <b>questions</b> ({@link QuestionDrawPort},
- *       non bloquant). Chaque résultat revient par commande → événement (jamais de {@code join()}
- *       sur le thread du processor, jamais de mutation de la saga depuis un callback).</li>
- *   <li>{@code RoomQuestionsLoadedEvent} → envoi de {@code CreateGameCommand} (assemblé par
- *       {@link GamePreparationService}) en <b>fire-and-forget</b>, association sur {@code gameId}
- *       et deadline d'accusé ; {@code GameCreatedEvent} → {@code MarkRoomGameCreatedCommand} puis
- *       {@code RoomGameCreatedEvent} → {@code CompleteRoomCommand}. Accusé absent, échec ou
- *       timeout d'une étape → {@code RoomFailedEvent} annoncé aux joueurs présents.</li>
+ *       (préparé par la façade et porté par l'événement : aucune I/O de la saga pour les profils).
+ *   <li>{@code RoomAllPlayersPresentEvent} → les profils sont déjà connus, la saga avance le statut
+ *       ({@code MarkRoomPlayersLoadedCommand}) ; {@code RoomPlayersLoadedEvent} → étape
+ *       <b>historique des questions jouées</b> ({@link PlayedQuestionsPort}, non bloquant) ; {@code
+ *       RoomPlayedQuestionsLoadedEvent} → étape <b>questions</b> ({@link QuestionDrawPort}, non
+ *       bloquant). Chaque résultat revient par commande → événement (jamais de {@code join()} sur
+ *       le thread du processor, jamais de mutation de la saga depuis un callback).
+ *   <li>{@code RoomQuestionsLoadedEvent} → envoi de {@code CreateGameCommand} (assemblé par {@link
+ *       GamePreparationService}) en <b>fire-and-forget</b>, association sur {@code gameId} et
+ *       deadline d'accusé ; {@code GameCreatedEvent} → {@code MarkRoomGameCreatedCommand} puis
+ *       {@code RoomGameCreatedEvent} → {@code CompleteRoomCommand}. Accusé absent, échec ou timeout
+ *       d'une étape → {@code RoomFailedEvent} annoncé aux joueurs présents.
  *   <li>{@code RoomLeftEvent} (sortie non destructive avant engagement) → retour possible. La
- *       sortie est refusée par l'agrégat une fois la préparation
- *       engagée.</li>
- *   <li>États terminaux → purge après rétention ; {@code RoomPurgedEvent} termine la saga.</li>
+ *       sortie est refusée par l'agrégat une fois la préparation engagée.
+ *   <li>États terminaux → purge après rétention ; {@code RoomPurgedEvent} termine la saga.
  * </ul>
  */
 @Saga
@@ -65,76 +67,47 @@ public class RoomSaga {
 
     private static final Logger logger = LoggerFactory.getLogger(RoomSaga.class);
 
-    @Autowired
-    private transient CommandGateway commandGateway;
+    @Autowired private transient CommandGateway commandGateway;
+
+    @Autowired private transient DeadlineManager deadlineManager;
+
+    @Autowired private transient QuestionDrawPort questionDrawPort;
 
     @Autowired
-    private transient DeadlineManager deadlineManager;
+    private transient com.joutio.matchmaking.domain.port.out.TopicAvailabilityPort
+            topicAvailability;
 
-    @Autowired
-    private transient QuestionDrawPort questionDrawPort;
+    @Autowired private transient PlayedQuestionsPort playedQuestionsPort;
 
-    @Autowired
-    private transient PlayedQuestionsPort playedQuestionsPort;
+    @Autowired private transient GamePreparationService gamePreparationService;
 
-    @Autowired
-    private transient GamePreparationService gamePreparationService;
+    @Getter @Setter private String roomId;
 
-    @Getter
-    @Setter
-    private String roomId;
+    @Getter @Setter private String topicId;
 
-    @Getter
-    @Setter
-    private String topicId;
+    @Getter @Setter private String initiatorId;
 
-    @Getter
-    @Setter
-    private String initiatorId;
+    @Getter @Setter private String participantId;
 
-    @Getter
-    @Setter
-    private String participantId;
+    @Getter @Setter private boolean vsBot;
 
-    @Getter
-    @Setter
-    private boolean vsBot;
+    @Getter @Setter private String botDifficulty;
 
-    @Getter
-    @Setter
-    private String botDifficulty;
+    @Getter @Setter private String expiryDeadlineId;
 
-    @Getter
-    @Setter
-    private String expiryDeadlineId;
+    @Getter @Setter private String purgeDeadlineId;
 
-    @Getter
-    @Setter
-    private String purgeDeadlineId;
+    @Getter @Setter private String gameId;
 
-    @Getter
-    @Setter
-    private String gameId;
+    @Getter @Setter private String gameCreationDeadlineId;
 
-    @Getter
-    @Setter
-    private String gameCreationDeadlineId;
+    @Getter @Setter private RoomPlayer initiatorProfile;
 
-    @Getter
-    @Setter
-    private RoomPlayer initiatorProfile;
+    @Getter @Setter private RoomPlayer participantProfile;
 
-    @Getter
-    @Setter
-    private RoomPlayer participantProfile;
+    @Getter @Setter private Set<String> playedQuestionIds;
 
-    @Getter
-    @Setter
-    private Set<String> playedQuestionIds;
-
-    @Getter
-    @Setter
-    private List<DrawnQuestion> drawnQuestions;
+    @Getter @Setter private List<DrawnQuestion> drawnQuestions;
 
     @StartSaga
     @SagaEventHandler(associationProperty = "roomId")
@@ -144,11 +117,14 @@ public class RoomSaga {
         this.initiatorId = event.initiatorId();
         this.vsBot = event.vsBot();
         this.botDifficulty = event.botDifficulty();
-        this.expiryDeadlineId = deadlineManager.schedule(
-                RoomDeadline.ROOM_EXPIRY_DURATION,
-                RoomDeadline.ROOM_EXPIRY);
-        logger.info("Salle créée, expiration dans {}h: roomId={}, vsBot={}",
-                RoomDeadline.ROOM_EXPIRY_DURATION.toHours(), roomId, vsBot);
+        this.expiryDeadlineId =
+                deadlineManager.schedule(
+                        RoomDeadline.ROOM_EXPIRY_DURATION, RoomDeadline.ROOM_EXPIRY);
+        logger.info(
+                "Salle créée, expiration dans {}h: roomId={}, vsBot={}",
+                RoomDeadline.ROOM_EXPIRY_DURATION.toHours(),
+                roomId,
+                vsBot);
     }
 
     /**
@@ -195,12 +171,37 @@ public class RoomSaga {
         this.drawnQuestions = event.questions();
         int drawnCount = drawnQuestions == null ? 0 : drawnQuestions.size();
         if (drawnCount < GameRules.TOTAL_ROUNDS) {
-            logger.warn("Thème insuffisant dans les langues requises, échec de la salle: roomId={}, topicId={}, questions={}",
-                    roomId, topicId, drawnCount);
-            commandGateway.send(new RoomCommand.FailRoomCommand(roomId, "TOPIC_NOT_AVAILABLE_IN_LANGUAGE"));
+            logger.warn(
+                    "Thème insuffisant dans les langues requises, échec de la salle: roomId={},"
+                            + " topicId={}, questions={}",
+                    roomId,
+                    topicId,
+                    drawnCount);
+            commandGateway.send(
+                    new RoomCommand.FailRoomCommand(roomId, "TOPIC_NOT_AVAILABLE_IN_LANGUAGE"));
             return;
         }
         logger.info("Préparation terminée, création de la partie: roomId={}", roomId);
+        String currentRoomId = roomId;
+        CommandGateway currentGateway = commandGateway;
+        topicAvailability
+                .playable(topicId)
+                .orTimeout(
+                        RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(),
+                        TimeUnit.MILLISECONDS)
+                .whenComplete(
+                        (playable, error) ->
+                                currentGateway.send(
+                                        error == null && Boolean.TRUE.equals(playable)
+                                                ? new RoomCommand
+                                                        .ConfirmRoomTopicAvailabilityCommand(
+                                                        currentRoomId)
+                                                : new RoomCommand.FailRoomCommand(
+                                                        currentRoomId, "TOPIC_UNAVAILABLE")));
+    }
+
+    @SagaEventHandler(associationProperty = "roomId")
+    public void on(RoomEvent.RoomTopicAvailabilityConfirmedEvent event) {
         requestGameCreation();
     }
 
@@ -227,11 +228,20 @@ public class RoomSaga {
         }
         String currentRoomId = this.roomId;
         CommandGateway currentGateway = this.commandGateway;
-        playedQuestionsPort.findPlayedQuestionIds(topicId, humanPlayerIds())
-                .orTimeout(RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
-                .whenComplete((playedIds, failure) -> currentGateway.send(failure == null
-                        ? new RoomCommand.MarkRoomPlayedQuestionsLoadedCommand(currentRoomId, playedIds)
-                        : new RoomCommand.FailRoomCommand(currentRoomId, "ROOM_PREPARATION_FAILED")));
+        playedQuestionsPort
+                .findPlayedQuestionIds(topicId, humanPlayerIds())
+                .orTimeout(
+                        RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(),
+                        TimeUnit.MILLISECONDS)
+                .whenComplete(
+                        (playedIds, failure) ->
+                                currentGateway.send(
+                                        failure == null
+                                                ? new RoomCommand
+                                                        .MarkRoomPlayedQuestionsLoadedCommand(
+                                                        currentRoomId, playedIds)
+                                                : new RoomCommand.FailRoomCommand(
+                                                        currentRoomId, "ROOM_PREPARATION_FAILED")));
     }
 
     /** Joueurs humains de la salle (le bot n'a pas d'historique). */
@@ -252,21 +262,26 @@ public class RoomSaga {
         if (drawnQuestions != null || !profilesLoaded()) {
             return;
         }
-        DrawnQuestionDifficulty target = QuestionLevelRules.targetForTopicXp(
-                initiatorProfile.topicXp(),
-                participantProfile == null ? null : participantProfile.topicXp());
+        DrawnQuestionDifficulty target =
+                QuestionLevelRules.targetForTopicXp(
+                        initiatorProfile.topicXp(),
+                        participantProfile == null ? null : participantProfile.topicXp());
         Set<String> excluded = playedQuestionIds == null ? Set.of() : playedQuestionIds;
         String currentRoomId = this.roomId;
         CommandGateway currentGateway = this.commandGateway;
-        questionDrawPort.draw(
-                        topicId,
-                        languagesOf(initiatorProfile, participantProfile),
-                        target,
-                        excluded)
-                .orTimeout(RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)
-                .whenComplete((questions, failure) -> currentGateway.send(failure == null
-                        ? new RoomCommand.MarkRoomQuestionsLoadedCommand(currentRoomId, questions)
-                        : new RoomCommand.FailRoomCommand(currentRoomId, "ROOM_PREPARATION_FAILED")));
+        questionDrawPort
+                .draw(topicId, languagesOf(initiatorProfile, participantProfile), target, excluded)
+                .orTimeout(
+                        RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(),
+                        TimeUnit.MILLISECONDS)
+                .whenComplete(
+                        (questions, failure) ->
+                                currentGateway.send(
+                                        failure == null
+                                                ? new RoomCommand.MarkRoomQuestionsLoadedCommand(
+                                                        currentRoomId, questions)
+                                                : new RoomCommand.FailRoomCommand(
+                                                        currentRoomId, "ROOM_PREPARATION_FAILED")));
     }
 
     /**
@@ -276,14 +291,17 @@ public class RoomSaga {
      */
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomLeftEvent event) {
-        logger.info("Joueur sorti de la salle (retour possible jusqu'à l'expiration): roomId={}, playerId={}",
-                roomId, event.playerId());
+        logger.info(
+                "Joueur sorti de la salle (retour possible jusqu'à l'expiration): roomId={},"
+                        + " playerId={}",
+                roomId,
+                event.playerId());
     }
 
     /**
-     * Demande de création : {@code CreateGameCommand} fire-and-forget (assemblée par
-     * {@link GamePreparationService}), association sur {@code gameId} pour recevoir l'accusé du
-     * service game, et deadline de sécurité. Idempotent (relecture at-least-once).
+     * Demande de création : {@code CreateGameCommand} fire-and-forget (assemblée par {@link
+     * GamePreparationService}), association sur {@code gameId} pour recevoir l'accusé du service
+     * game, et deadline de sécurité. Idempotent (relecture at-least-once).
      */
     private void requestGameCreation() {
         if (gameId != null
@@ -294,12 +312,24 @@ public class RoomSaga {
         }
         this.gameId = UUID.randomUUID().toString();
         SagaLifecycle.associateWith("gameId", gameId);
-        this.gameCreationDeadlineId = deadlineManager.schedule(
-                RoomDeadline.ROOM_GAME_CREATION_DURATION,
-                RoomDeadline.ROOM_GAME_CREATION);
-        logger.info("Création de partie demandée: roomId={}, gameId={}, vsBot={}", roomId, gameId, vsBot);
-        commandGateway.send(gamePreparationService.createGameCommand(
-                gameId, topicId, initiatorProfile, participantProfile, vsBot, botDifficulty, drawnQuestions));
+        this.gameCreationDeadlineId =
+                deadlineManager.schedule(
+                        RoomDeadline.ROOM_GAME_CREATION_DURATION, RoomDeadline.ROOM_GAME_CREATION);
+        logger.info(
+                "Création de partie demandée: roomId={}, gameId={}, vsBot={}",
+                roomId,
+                gameId,
+                vsBot);
+        var prepared =
+                gamePreparationService.createGameCommand(
+                        gameId,
+                        topicId,
+                        initiatorProfile,
+                        participantProfile,
+                        vsBot,
+                        botDifficulty,
+                        drawnQuestions);
+        commandGateway.send(prepared);
     }
 
     /** Accusé du service game : la partie existe, la salle peut être clôturée. */
@@ -313,11 +343,16 @@ public class RoomSaga {
     /** La salle a accusé la création : clôture. */
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomGameCreatedEvent event) {
-        logger.info("Accusé de création en salle, clôture: roomId={}, gameId={}", roomId, event.gameId());
+        logger.info(
+                "Accusé de création en salle, clôture: roomId={}, gameId={}",
+                roomId,
+                event.gameId());
         commandGateway.send(new RoomCommand.CompleteRoomCommand(roomId, event.gameId()));
     }
 
-    /** Accusé de création absent (échec/routage perdu) : la salle échoue au lieu de rester bloquée. */
+    /**
+     * Accusé de création absent (échec/routage perdu) : la salle échoue au lieu de rester bloquée.
+     */
     @DeadlineHandler(deadlineName = RoomDeadline.ROOM_GAME_CREATION)
     public void onGameCreationTimeout() {
         logger.warn("Accusé de création de partie absent: roomId={}, gameId={}", roomId, gameId);
@@ -325,9 +360,9 @@ public class RoomSaga {
     }
 
     /**
-     * Échec synchrone d'un handler de la saga (mapping, envoi de commande) : la salle échoue au lieu
-     * de bloquer le processor. Les échecs asynchrones des requêtes non bloquantes sont convertis
-     * par le callback de chaque étape ({@code ROOM_PREPARATION_FAILED}).
+     * Échec synchrone d'un handler de la saga (mapping, envoi de commande) : la salle échoue au
+     * lieu de bloquer le processor. Les échecs asynchrones des requêtes non bloquantes sont
+     * convertis par le callback de chaque étape ({@code ROOM_PREPARATION_FAILED}).
      */
     @ExceptionHandler
     public void on(Exception exception) {
@@ -379,9 +414,9 @@ public class RoomSaga {
 
     private void schedulePurge() {
         if (purgeDeadlineId == null) {
-            purgeDeadlineId = deadlineManager.schedule(
-                    RoomDeadline.ROOM_RETENTION_DURATION,
-                    RoomDeadline.ROOM_PURGE);
+            purgeDeadlineId =
+                    deadlineManager.schedule(
+                            RoomDeadline.ROOM_RETENTION_DURATION, RoomDeadline.ROOM_PURGE);
         }
     }
 

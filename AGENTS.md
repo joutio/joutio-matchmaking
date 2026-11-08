@@ -244,3 +244,11 @@ la traduction vers `game.GameQuestion` est faite par la saga émettrice elle-mê
   (`GetMyChallenges`, `GetMyOpenRooms`) excluent les échéances dépassées.
 - **Data prod** : les breaking changes des contrats sont accompagnés d'un **reset** de la data
   (schéma recréé, pas de migration de compatibilité).
+
+### Disponibilité et reprise des salles — 2026-11-08
+
+`TopicAvailabilityPort` vérifie le sujet de façon asynchrone avant l'envoi de `CreateGameCommand`.
+Un brouillon ou un échec de vérification fait échouer la salle (`TOPIC_UNAVAILABLE`). Aucun I/O dans
+les agrégats, aucun blocage de la saga. `GetMyOpenRooms` inclut désormais les salles humaines encore
+ouvertes et en préparation, pour initiateur, invité nominatif ou participant ; les statuts terminaux
+et salles expirées restent exclus. Les gardes de quota continuent de compter seulement `WAITING_PLAYERS`.

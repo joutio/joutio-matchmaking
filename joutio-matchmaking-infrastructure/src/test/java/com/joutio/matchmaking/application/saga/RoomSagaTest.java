@@ -1,5 +1,10 @@
 package com.joutio.matchmaking.application.saga;
 
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
 import com.joutio.game.domain.command.GameCommand;
 import com.joutio.game.domain.model.GameRules;
 import com.joutio.matchmaking.application.service.GamePreparationService;
@@ -12,6 +17,7 @@ import com.joutio.matchmaking.domain.model.RoomPlayer;
 import com.joutio.matchmaking.domain.port.out.PlayedQuestionsPort;
 import com.joutio.matchmaking.domain.port.out.QuestionDrawPort;
 import com.joutio.microservice.core.domain.model.i18n.Language;
+
 import org.axonframework.commandhandling.CommandMessage;
 import org.axonframework.test.matchers.Matchers;
 import org.axonframework.test.saga.SagaTestFixture;
@@ -25,16 +31,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
-import static org.mockito.ArgumentMatchers.anySet;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-
 /**
  * Test in-memory de l'orchestration asynchrone de {@link RoomSaga} via {@link SagaTestFixture} :
  * profils portés par les événements d'apparition (aucune I/O), historique et tirage ramenés par
- * commande → événement (jamais de {@code join()} sur le thread du processor, jamais de mutation
- * de la saga depuis le callback).
+ * commande → événement (jamais de {@code join()} sur le thread du processor, jamais de mutation de
+ * la saga depuis le callback).
  */
 class RoomSagaTest {
 
@@ -51,11 +52,16 @@ class RoomSagaTest {
     private final PlayedQuestionsPort playedQuestionsPort = Mockito.mock(PlayedQuestionsPort.class);
     private final QuestionDrawPort questionDrawPort = Mockito.mock(QuestionDrawPort.class);
 
+    private final com.joutio.matchmaking.domain.port.out.TopicAvailabilityPort topicAvailability =
+            Mockito.mock(com.joutio.matchmaking.domain.port.out.TopicAvailabilityPort.class);
+
     private final SagaTestFixture<RoomSaga> fixture = new SagaTestFixture<>(RoomSaga.class);
 
     RoomSagaTest() {
         fixture.registerResource(playedQuestionsPort);
         fixture.registerResource(questionDrawPort);
+        fixture.registerResource(topicAvailability);
+        when(topicAvailability.playable(TOPIC)).thenReturn(CompletableFuture.completedFuture(true));
         fixture.registerResource(new GamePreparationService());
     }
 
@@ -81,7 +87,8 @@ class RoomSagaTest {
                 .andThenAPublished(allPresent())
                 .whenPublishingA(playersLoaded())
                 .expectDispatchedCommands(
-                        new RoomCommand.MarkRoomPlayedQuestionsLoadedCommand(ROOM_ID, Set.of("q-1")));
+                        new RoomCommand.MarkRoomPlayedQuestionsLoadedCommand(
+                                ROOM_ID, Set.of("q-1")));
     }
 
     @Test
@@ -94,14 +101,18 @@ class RoomSagaTest {
                 .andThenAPublished(entered(PARTICIPANT_PLAYER))
                 .andThenAPublished(allPresent())
                 .whenPublishingA(playersLoaded())
-                .expectDispatchedCommands(new RoomCommand.FailRoomCommand(ROOM_ID, "ROOM_PREPARATION_FAILED"));
+                .expectDispatchedCommands(
+                        new RoomCommand.FailRoomCommand(ROOM_ID, "ROOM_PREPARATION_FAILED"));
     }
 
     @Test
     void playedQuestionsLoaded_drawsQuestions_withTopicXpDerivedPreferences() {
         DrawnQuestion question = drawnQuestion("q-1");
-        when(questionDrawPort.draw(eq(TOPIC), eq(Set.of(Language.FR, Language.EN)),
-                eq(DrawnQuestionDifficulty.MEDIUM), eq(Set.of("q-1"))))
+        when(questionDrawPort.draw(
+                        eq(TOPIC),
+                        eq(Set.of(Language.FR, Language.EN)),
+                        eq(DrawnQuestionDifficulty.MEDIUM),
+                        eq(Set.of("q-1"))))
                 .thenReturn(CompletableFuture.completedFuture(List.of(question)));
 
         fixture.givenAPublished(roomCreated())
@@ -113,12 +124,13 @@ class RoomSagaTest {
     }
 
     @Test
-    void questionsLoaded_withEnoughQuestions_sendsCreateGameCommand() {
+    void questionsLoaded_withEnoughQuestions_checksTopicThroughRoomCommand() {
         fixture.givenAPublished(roomCreated())
                 .andThenAPublished(entered(INITIATOR_PLAYER))
                 .andThenAPublished(entered(PARTICIPANT_PLAYER))
                 .whenPublishingA(questionsLoaded(sevenQuestions()))
-                .expectDispatchedCommandsMatching(createGameCommandMatching());
+                .expectDispatchedCommands(
+                        new RoomCommand.ConfirmRoomTopicAvailabilityCommand(ROOM_ID));
     }
 
     @Test
@@ -128,15 +140,19 @@ class RoomSagaTest {
                 .andThenAPublished(entered(PARTICIPANT_PLAYER))
                 .whenPublishingA(questionsLoaded(List.of(drawnQuestion("q-1"))))
                 .expectDispatchedCommands(
-                        new RoomCommand.FailRoomCommand(ROOM_ID, "TOPIC_NOT_AVAILABLE_IN_LANGUAGE"));
+                        new RoomCommand.FailRoomCommand(
+                                ROOM_ID, "TOPIC_NOT_AVAILABLE_IN_LANGUAGE"));
     }
 
     private static Matcher<? extends List<? super CommandMessage<?>>> createGameCommandMatching() {
-        return Matchers.matches(commands -> commands.size() == 1
-                && commands.getFirst() instanceof CommandMessage<?> message
-                && message.getPayload() instanceof GameCommand.CreateGameCommand command
-                && TOPIC.equals(command.topicId())
-                && command.questions().size() == GameRules.TOTAL_ROUNDS);
+        return Matchers.matches(
+                commands ->
+                        commands.size() == 1
+                                && commands.getFirst() instanceof CommandMessage<?> message
+                                && message.getPayload()
+                                        instanceof GameCommand.CreateGameCommand command
+                                && TOPIC.equals(command.topicId())
+                                && command.questions().size() == GameRules.TOTAL_ROUNDS);
     }
 
     private static List<DrawnQuestion> sevenQuestions() {
@@ -151,8 +167,14 @@ class RoomSagaTest {
 
     private static RoomEvent.RoomCreatedEvent roomCreated() {
         return new RoomEvent.RoomCreatedEvent(
-                ROOM_ID, TOPIC, INITIATOR, null, false, null,
-                Instant.now().plusSeconds(3600), Instant.now());
+                ROOM_ID,
+                TOPIC,
+                INITIATOR,
+                null,
+                false,
+                null,
+                Instant.now().plusSeconds(3600),
+                Instant.now());
     }
 
     private static RoomEvent.RoomEnteredEvent entered(RoomPlayer player) {
@@ -167,11 +189,38 @@ class RoomSagaTest {
         return new RoomEvent.RoomPlayersLoadedEvent(ROOM_ID, Instant.now());
     }
 
-    private static RoomEvent.RoomPlayedQuestionsLoadedEvent playedQuestionsLoaded(Set<String> playedQuestionIds) {
-        return new RoomEvent.RoomPlayedQuestionsLoadedEvent(ROOM_ID, playedQuestionIds, Instant.now());
+    private static RoomEvent.RoomPlayedQuestionsLoadedEvent playedQuestionsLoaded(
+            Set<String> playedQuestionIds) {
+        return new RoomEvent.RoomPlayedQuestionsLoadedEvent(
+                ROOM_ID, playedQuestionIds, Instant.now());
     }
 
-    private static RoomEvent.RoomQuestionsLoadedEvent questionsLoaded(List<DrawnQuestion> questions) {
+    private static RoomEvent.RoomQuestionsLoadedEvent questionsLoaded(
+            List<DrawnQuestion> questions) {
         return new RoomEvent.RoomQuestionsLoadedEvent(ROOM_ID, questions, Instant.now());
+    }
+
+    @Test
+    void questionsLoaded_whenTopicBecameDraft_doesNotCreateGame() {
+        when(topicAvailability.playable(TOPIC))
+                .thenReturn(CompletableFuture.completedFuture(false));
+        fixture.givenAPublished(roomCreated())
+                .andThenAPublished(entered(INITIATOR_PLAYER))
+                .andThenAPublished(entered(PARTICIPANT_PLAYER))
+                .whenPublishingA(questionsLoaded(sevenQuestions()))
+                .expectDispatchedCommands(
+                        new RoomCommand.FailRoomCommand(ROOM_ID, "TOPIC_UNAVAILABLE"));
+    }
+
+    @Test
+    void confirmedTopic_createsGameFromPreparedSnapshot() {
+        fixture.givenAPublished(roomCreated())
+                .andThenAPublished(entered(INITIATOR_PLAYER))
+                .andThenAPublished(entered(PARTICIPANT_PLAYER))
+                .andThenAPublished(questionsLoaded(sevenQuestions()))
+                .whenPublishingA(
+                        new RoomEvent.RoomTopicAvailabilityConfirmedEvent(
+                                ROOM_ID, java.time.Instant.now()))
+                .expectDispatchedCommandsMatching(createGameCommandMatching());
     }
 }

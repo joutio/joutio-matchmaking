@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.domain.aggregate;
 
+import static org.axonframework.modelling.command.AggregateLifecycle.apply;
+
 import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.exception.RoomExceptions;
@@ -7,6 +9,7 @@ import com.joutio.matchmaking.domain.model.RoomDeadline;
 import com.joutio.matchmaking.domain.model.RoomStatus;
 import com.joutio.matchmaking.domain.model.RoomWizzRules;
 import com.joutio.microservice.core.domain.constant.JoutioConstants;
+
 import org.apache.commons.lang3.StringUtils;
 import org.axonframework.commandhandling.CommandHandler;
 import org.axonframework.eventsourcing.EventSourcingHandler;
@@ -19,15 +22,13 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.time.Instant;
 
-import static org.axonframework.modelling.command.AggregateLifecycle.apply;
-
 /**
  * RoomAggregate — salle temps réel : deux humains (salle partagée ou appariement) ou un humain
  * contre le bot.
- * <p>
- * Le créateur est l'initiateur ; le second humain devient participant lors de son
- * <b>apparition</b> dans la salle ({@code JoinRoomCommand}, émis par le client). Seule exception
- * au client-driven : le bot, joint automatiquement par la saga quand la salle est {@code vsBot}.
+ *
+ * <p>Le créateur est l'initiateur ; le second humain devient participant lors de son
+ * <b>apparition</b> dans la salle ({@code JoinRoomCommand}, émis par le client). Seule exception au
+ * client-driven : le bot, joint automatiquement par la saga quand la salle est {@code vsBot}.
  * Aucune saga ne simule une action utilisateur, et aucun port externe n'est interrogé dans les
  * handlers. Le statut suit l'avancement de la préparation ({@link RoomStatus}) ; une préparation
  * engagée ne peut plus être quittée, mais l'initiateur peut toujours annuler. Un état terminal est
@@ -38,20 +39,21 @@ public class RoomAggregate {
 
     private static final Logger logger = LoggerFactory.getLogger(RoomAggregate.class);
 
-    @AggregateIdentifier
-    private String roomId;
+    @AggregateIdentifier private String roomId;
+    private boolean topicAvailabilityConfirmed;
     private String initiatorId;
     private String opponentId;
     private String participantId;
     private RoomStatus status;
     private boolean initiatorPresent;
     private boolean participantPresent;
+
     /** Dernière relance (« wizz ») de chaque joueur : cadence anti-spam, jamais bloquante. */
     private Instant initiatorWizzedAt;
+
     private Instant participantWizzedAt;
 
-    protected RoomAggregate() {
-    }
+    protected RoomAggregate() {}
 
     /**
      * Ouvre une salle. Si {@code opponentId} est renseigné, c'est une salle nominative : seul cet
@@ -65,20 +67,28 @@ public class RoomAggregate {
         requirePlayerId(command.initiatorId(), command.roomId());
         requireTopicId(command.topicId(), command.roomId());
 
-        logger.info("Creating room: roomId={}, topicId={}, initiatorId={}, opponentId={}, vsBot={}",
-                command.roomId(), command.topicId(), command.initiatorId(), command.opponentId(), command.vsBot());
-        Instant now = Instant.now();
-        apply(new RoomEvent.RoomCreatedEvent(
+        logger.info(
+                "Creating room: roomId={}, topicId={}, initiatorId={}, opponentId={}, vsBot={}",
                 command.roomId(),
                 command.topicId(),
                 command.initiatorId(),
                 command.opponentId(),
-                command.vsBot(),
-                command.botDifficulty(),
-                now.plus(RoomDeadline.ROOM_EXPIRY_DURATION),
-                now));
+                command.vsBot());
+        Instant now = Instant.now();
+        apply(
+                new RoomEvent.RoomCreatedEvent(
+                        command.roomId(),
+                        command.topicId(),
+                        command.initiatorId(),
+                        command.opponentId(),
+                        command.vsBot(),
+                        command.botDifficulty(),
+                        now.plus(RoomDeadline.ROOM_EXPIRY_DURATION),
+                        now));
         if (command.vsBot()) {
-            apply(new RoomEvent.RoomEnteredEvent(command.roomId(), JoutioConstants.SYSTEM_USER_ID, null, now));
+            apply(
+                    new RoomEvent.RoomEnteredEvent(
+                            command.roomId(), JoutioConstants.SYSTEM_USER_ID, null, now));
         }
     }
 
@@ -94,15 +104,19 @@ public class RoomAggregate {
             return;
         }
 
-        boolean known = command.playerId().equals(initiatorId) || command.playerId().equals(participantId);
-        boolean alreadyPresent = command.playerId().equals(initiatorId) ? initiatorPresent : participantPresent;
+        boolean known =
+                command.playerId().equals(initiatorId) || command.playerId().equals(participantId);
+        boolean alreadyPresent =
+                command.playerId().equals(initiatorId) ? initiatorPresent : participantPresent;
         if (known && alreadyPresent) {
             return;
         }
         if (!known && StringUtils.isNotBlank(participantId)) {
             throw new RoomExceptions.RoomAlreadyFullProblem(roomId);
         }
-        if (!known && StringUtils.isNotBlank(opponentId) && !command.playerId().equals(opponentId)) {
+        if (!known
+                && StringUtils.isNotBlank(opponentId)
+                && !command.playerId().equals(opponentId)) {
             throw new RoomExceptions.RoomNotInvitedProblem(roomId, command.playerId());
         }
 
@@ -119,8 +133,8 @@ public class RoomAggregate {
     /**
      * Sortie <b>non destructive</b> avant l'engagement : le joueur quitte la salle mais le
      * participant reste enregistré (retour possible). Refusée dès que la préparation est lancée
-     * (les deux présents) — le duel est engagé. La salle ne se ferme que par
-     * {@code CancelRoomCommand} (initiateur) ou expiration.
+     * (les deux présents) — le duel est engagé. La salle ne se ferme que par {@code
+     * CancelRoomCommand} (initiateur) ou expiration.
      */
     @CommandHandler
     public void handle(RoomCommand.LeaveRoomCommand command) {
@@ -131,9 +145,8 @@ public class RoomAggregate {
         if (status != RoomStatus.WAITING_PLAYERS) {
             throw new RoomExceptions.RoomPreparationStartedProblem(roomId);
         }
-        boolean alreadyAbsent = command.playerId().equals(initiatorId)
-                ? !initiatorPresent
-                : !participantPresent;
+        boolean alreadyAbsent =
+                command.playerId().equals(initiatorId) ? !initiatorPresent : !participantPresent;
         if (alreadyAbsent) {
             return;
         }
@@ -142,9 +155,9 @@ public class RoomAggregate {
 
     /**
      * Relance (« wizz ») : le joueur <b>présent</b> demande à l'autre joueur humain — absent — de
-     * rejoindre la salle. Pur effet temps réel : la préparation n'est pas déclenchée et la
-     * cadence ({@code RoomWizzRules}, 10 s par joueur) borne le harcèlement. Sans cible relançable
-     * (salle partagée sans invité, adversaire déjà présent, bot), la commande est refusée ; une
+     * rejoindre la salle. Pur effet temps réel : la préparation n'est pas déclenchée et la cadence
+     * ({@code RoomWizzRules}, 10 s par joueur) borne le harcèlement. Sans cible relançable (salle
+     * partagée sans invité, adversaire déjà présent, bot), la commande est refusée ; une
      * préparation engagée ou une salle terminale l'ignore (le second joueur vient d'arriver).
      */
     @CommandHandler
@@ -165,8 +178,11 @@ public class RoomAggregate {
         if (isWithinWizzCooldown(command.playerId(), now)) {
             throw new RoomExceptions.RoomWizzCooldownProblem(roomId, command.playerId());
         }
-        logger.info("Player wizzed room: roomId={}, playerId={}, targetId={}",
-                roomId, command.playerId(), targetId);
+        logger.info(
+                "Player wizzed room: roomId={}, playerId={}, targetId={}",
+                roomId,
+                command.playerId(),
+                targetId);
         apply(new RoomEvent.RoomWizzedEvent(roomId, command.playerId(), targetId, now));
     }
 
@@ -179,7 +195,9 @@ public class RoomAggregate {
         if (!command.playerId().equals(initiatorId)) {
             throw new RoomExceptions.PlayerNotInRoomProblem(roomId, command.playerId());
         }
-        apply(new RoomEvent.RoomCancelledEvent(roomId, initiatorId, "PLAYER_CANCELLED", Instant.now()));
+        apply(
+                new RoomEvent.RoomCancelledEvent(
+                        roomId, initiatorId, "PLAYER_CANCELLED", Instant.now()));
     }
 
     /** Commande interne (saga) : les profils sont résolus ; avance la préparation (monotone). */
@@ -199,11 +217,14 @@ public class RoomAggregate {
             return;
         }
         logger.info("Played questions loaded in room: roomId={}", roomId);
-        apply(new RoomEvent.RoomPlayedQuestionsLoadedEvent(
-                roomId, command.playedQuestionIds(), Instant.now()));
+        apply(
+                new RoomEvent.RoomPlayedQuestionsLoadedEvent(
+                        roomId, command.playedQuestionIds(), Instant.now()));
     }
 
-    /** Commande interne (saga) : les questions sont tirées ; la saga lance la création de la partie. */
+    /**
+     * Commande interne (saga) : les questions sont tirées ; la saga lance la création de la partie.
+     */
     @CommandHandler
     public void handle(RoomCommand.MarkRoomQuestionsLoadedCommand command) {
         if (status != RoomStatus.FETCHING_QUESTIONS) {
@@ -240,7 +261,9 @@ public class RoomAggregate {
         apply(new RoomEvent.RoomCompletedEvent(roomId, command.gameId(), Instant.now()));
     }
 
-    /** Échec système : la partie n'a pas pu être préparée (questions insuffisantes, création KO). */
+    /**
+     * Échec système : la partie n'a pas pu être préparée (questions insuffisantes, création KO).
+     */
     @CommandHandler
     public void handle(RoomCommand.FailRoomCommand command) {
         if (isClosed()) {
@@ -306,9 +329,8 @@ public class RoomAggregate {
      */
     private String wizzableOpponent(String playerId) {
         boolean fromInitiator = playerId.equals(initiatorId);
-        String targetId = fromInitiator
-                ? (participantId != null ? participantId : opponentId)
-                : initiatorId;
+        String targetId =
+                fromInitiator ? (participantId != null ? participantId : opponentId) : initiatorId;
         if (StringUtils.isBlank(targetId) || JoutioConstants.SYSTEM_USER_ID.equals(targetId)) {
             return null;
         }
@@ -318,9 +340,12 @@ public class RoomAggregate {
 
     /** Cadence anti-spam : le dernier wizz du joueur n'est pas encore absorbé. */
     private boolean isWithinWizzCooldown(String playerId, Instant now) {
-        Instant lastWizzedAt = playerId.equals(initiatorId) ? initiatorWizzedAt : participantWizzedAt;
+        Instant lastWizzedAt =
+                playerId.equals(initiatorId) ? initiatorWizzedAt : participantWizzedAt;
         return lastWizzedAt != null
-                && Duration.between(lastWizzedAt, now).compareTo(RoomWizzRules.WIZZ_COOLDOWN_DURATION) < 0;
+                && Duration.between(lastWizzedAt, now)
+                                .compareTo(RoomWizzRules.WIZZ_COOLDOWN_DURATION)
+                        < 0;
     }
 
     private boolean bothPresent() {
@@ -430,5 +455,16 @@ public class RoomAggregate {
     @EventSourcingHandler
     public void on(RoomEvent.RoomPurgedEvent event) {
         AggregateLifecycle.markDeleted();
+    }
+
+    @CommandHandler
+    public void handle(RoomCommand.ConfirmRoomTopicAvailabilityCommand command) {
+        if (status != RoomStatus.CREATING_GAME || topicAvailabilityConfirmed) return;
+        apply(new RoomEvent.RoomTopicAvailabilityConfirmedEvent(roomId, Instant.now()));
+    }
+
+    @EventSourcingHandler
+    public void on(RoomEvent.RoomTopicAvailabilityConfirmedEvent event) {
+        topicAvailabilityConfirmed = true;
     }
 }

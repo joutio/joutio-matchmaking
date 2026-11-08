@@ -13,6 +13,10 @@
 
     <artifactId>joutio-matchmaking-infrastructure</artifactId>
 
+    <properties>
+        <joutio.theme-domain.version>2.0.0</joutio.theme-domain.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.joutio</groupId>
@@ -32,7 +36,7 @@
         <dependency>
             <groupId>com.joutio</groupId>
             <artifactId>joutio-theme-domain</artifactId>
-            <version>1.0.0</version>
+            <version>${joutio.theme-domain.version}</version>
         </dependency>
         <dependency>
             <groupId>com.joutio</groupId>
