@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/joutio/joutio-matchmaking/compare/v1.0.0...v1.1.0) (2026-11-08)
+
+### Features
+
+* **matchmaking:** guard topic availability and resume accepted challenge rooms ([8ca5d10](https://github.com/joutio/joutio-matchmaking/commit/8ca5d10f5b61dcf36a2f8d6590227fff7019570f))
+
 ## 1.0.0 (2026-10-27)
 
 ### Features
