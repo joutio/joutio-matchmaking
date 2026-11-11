@@ -1,6 +1,7 @@
 package com.joutio.matchmaking.domain.event;
 
 import com.joutio.matchmaking.domain.model.DrawnQuestion;
+import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
 
 import java.time.Instant;
@@ -30,9 +31,12 @@ public interface RoomEvent {
 
     /**
      * Un joueur apparaît dans la salle (présence temps réel, idempotent). {@code player} est {@code
-     * null} pour le bot (présence système, aucun profil à résoudre).
+     * null} pour le bot (présence système, aucun profil à résoudre). {@code presenceId} : session
+     * temps réel qui porte la présence (nul pour le bot et les anciens clients) ; un joueur déjà
+     * présent qui revient par une autre session ré-émet l'événement avec la nouvelle.
      */
-    record RoomEnteredEvent(String roomId, String playerId, RoomPlayer player, Instant enteredAt)
+    record RoomEnteredEvent(
+            String roomId, String playerId, RoomPlayer player, Instant enteredAt, String presenceId)
             implements RoomEvent {}
 
     /**
@@ -69,7 +73,13 @@ public interface RoomEvent {
     record RoomGameCreatedEvent(String roomId, String gameId, Instant gameCreatedAt)
             implements RoomEvent {}
 
-    record RoomLeftEvent(String roomId, String playerId, Instant leftAt) implements RoomEvent {}
+    /**
+     * Le joueur n'est plus présent (il reste participant). {@code reason} est nul pour les
+     * événements antérieurs aux canaux de présence.
+     */
+    record RoomLeftEvent(
+            String roomId, String playerId, Instant leftAt, String presenceId, RoomLeaveReason reason)
+            implements RoomEvent {}
 
     /**
      * Relance (« wizz ») d'un adversaire absent : {@code playerId} demande à {@code targetId} de

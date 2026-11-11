@@ -178,7 +178,7 @@ class RoomSagaTest {
     }
 
     private static RoomEvent.RoomEnteredEvent entered(RoomPlayer player) {
-        return new RoomEvent.RoomEnteredEvent(ROOM_ID, player.playerId(), player, Instant.now());
+        return new RoomEvent.RoomEnteredEvent(ROOM_ID, player.playerId(), player, Instant.now(), null);
     }
 
     private static RoomEvent.RoomAllPlayersPresentEvent allPresent() {

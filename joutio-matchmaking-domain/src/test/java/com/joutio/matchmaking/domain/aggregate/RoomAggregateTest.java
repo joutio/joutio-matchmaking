@@ -4,6 +4,7 @@ import com.joutio.axon.test.JoutioAxonMatchers;
 import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.exception.RoomExceptions;
+import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
 import com.joutio.microservice.core.domain.constant.JoutioConstants;
 import com.joutio.microservice.core.domain.model.i18n.Language;
@@ -18,8 +19,8 @@ import java.util.Set;
 /**
  * Test Axon in-memory de {@link RoomAggregate} (salle : deux humains ou humain/bot).
  *
- * <p>Le client émet une unique commande d'apparition ({@code JoinRoomCommand}, profil préparé par
- * la façade) : présence et enregistrement du second participant ; le bot, lui, est présent dès la
+ * <p>Le BFF émet l'apparition ({@code JoinRoomCommand}, profil préparé par la façade) quand il
+ * observe l'abonnement au canal de présence, avec la session qui la porte : présence et enregistrement du second participant ; le bot, lui, est présent dès la
  * création de la salle (appliqué par l'agrégat, aucun join système). Après l'apparition des deux
  * joueurs, la préparation avance par commandes de phase (les résultats préparent l'événement
  * suivant : historique et questions) et la salle ne peut plus être quittée (l'annulation reste
@@ -110,7 +111,7 @@ class RoomAggregateTest {
     @Test
     void initiatorJoin_marksPresenceOnly_andCarriesPreparedProfile() {
         fixture.given(created())
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
                                 RoomEvent.RoomEnteredEvent.class,
@@ -125,7 +126,7 @@ class RoomAggregateTest {
     @Test
     void secondPlayerJoin_registersParticipantAndStartsReadyCheck() {
         fixture.given(created(), entered(INITIATOR_PLAYER))
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, PARTICIPANT, PARTICIPANT_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, PARTICIPANT, PARTICIPANT_PLAYER, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomEnteredEvent.class,
@@ -140,21 +141,21 @@ class RoomAggregateTest {
     @Test
     void joinTwice_isIdempotent() {
         fixture.given(created(), entered(INITIATOR_PLAYER))
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, null))
                 .expectNoEvents();
     }
 
     @Test
     void nominalRoom_refusesNonInvitedPlayer() {
         fixture.given(createdWithOpponent())
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, OTHER, OTHER_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, OTHER, OTHER_PLAYER, null))
                 .expectException(RoomExceptions.RoomNotInvitedProblem.class);
     }
 
     @Test
     void nominalRoom_letsInvitedPlayerJoin() {
         fixture.given(createdWithOpponent())
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, OPPONENT, OPPONENT_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, OPPONENT, OPPONENT_PLAYER, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomEnteredEvent.class,
@@ -164,7 +165,7 @@ class RoomAggregateTest {
     @Test
     void botRoom_humanJoinCompletesPresence_andStartsPreparation() {
         fixture.given(createdBot(), enteredBot())
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomEnteredEvent.class,
@@ -177,7 +178,7 @@ class RoomAggregateTest {
     @Test
     void sharedRoom_refusesThirdPlayer() {
         fixture.given(created(), entered(INITIATOR_PLAYER), entered(PARTICIPANT_PLAYER))
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, OTHER, OTHER_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, OTHER, OTHER_PLAYER, null))
                 .expectException(RoomExceptions.RoomAlreadyFullProblem.class);
     }
 
@@ -273,7 +274,7 @@ class RoomAggregateTest {
     @Test
     void leave_clearsPresenceBeforePreparation() {
         fixture.given(created(), entered(INITIATOR_PLAYER))
-                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, INITIATOR))
+                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, INITIATOR, null, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
                                 RoomEvent.RoomLeftEvent.class,
@@ -285,8 +286,8 @@ class RoomAggregateTest {
         fixture.given(
                         created(),
                         entered(INITIATOR_PLAYER),
-                        new RoomEvent.RoomLeftEvent(ROOM_ID, INITIATOR, Instant.now()))
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER))
+                        new RoomEvent.RoomLeftEvent(ROOM_ID, INITIATOR, Instant.now(), null, null))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomEnteredEvent.class,
@@ -302,22 +303,121 @@ class RoomAggregateTest {
                         entered(INITIATOR_PLAYER),
                         entered(PARTICIPANT_PLAYER),
                         allPresent())
-                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, PARTICIPANT))
+                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, PARTICIPANT, null, null))
                 .expectException(RoomExceptions.RoomPreparationStartedProblem.class);
     }
 
     @Test
     void leave_whenAlreadyAbsent_isNoop() {
         fixture.given(created())
-                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, INITIATOR))
+                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, INITIATOR, null, null))
                 .expectNoEvents();
     }
 
     @Test
     void leave_refusedToNonParticipant() {
         fixture.given(created())
-                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, OTHER))
+                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, OTHER, null, null))
                 .expectException(RoomExceptions.PlayerNotInRoomProblem.class);
+    }
+
+    // ===================== Présence observée par le serveur (sessions) =====================
+
+    @Test
+    void join_recordsTheSessionOfThePresence() {
+        fixture.given(created())
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, "s1"))
+                .expectEventsMatching(
+                        JoutioAxonMatchers.singlePayloadMatching(
+                                RoomEvent.RoomEnteredEvent.class,
+                                e -> "s1".equals(((RoomEvent.RoomEnteredEvent) e).presenceId())));
+    }
+
+    @Test
+    void join_sameSessionAgain_isNoop() {
+        fixture.given(created(), entered(INITIATOR_PLAYER, "s1"))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, "s1"))
+                .expectNoEvents();
+    }
+
+    @Test
+    void join_fromAnotherSession_takesOverThePresence() {
+        fixture.given(created(), entered(INITIATOR_PLAYER, "s1"))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, "s2"))
+                .expectEventsMatching(
+                        JoutioAxonMatchers.singlePayloadMatching(
+                                RoomEvent.RoomEnteredEvent.class,
+                                e -> "s2".equals(((RoomEvent.RoomEnteredEvent) e).presenceId())));
+    }
+
+    @Test
+    void leave_ofTheCurrentSession_clearsPresence() {
+        fixture.given(created(), entered(INITIATOR_PLAYER, "s1"))
+                .when(leave(INITIATOR, "s1", RoomLeaveReason.DISCONNECTED))
+                .expectEventsMatching(
+                        JoutioAxonMatchers.singlePayloadMatching(
+                                RoomEvent.RoomLeftEvent.class,
+                                e ->
+                                        ((RoomEvent.RoomLeftEvent) e).reason()
+                                                == RoomLeaveReason.DISCONNECTED));
+    }
+
+    @Test
+    void leave_ofAStaleSession_isIgnored() {
+        // Reconnexion sur une autre instance : la sortie différée de l'ancienne session arrive après.
+        fixture.given(created(), entered(INITIATOR_PLAYER, "s1"), entered(INITIATOR_PLAYER, "s2"))
+                .when(leave(INITIATOR, "s1", RoomLeaveReason.DISCONNECTED))
+                .expectNoEvents();
+    }
+
+    @Test
+    void observedLeave_oncePreparationStarted_isIgnored() {
+        fixture.given(
+                        created(),
+                        entered(INITIATOR_PLAYER, "s1"),
+                        entered(PARTICIPANT_PLAYER, "s2"),
+                        allPresent())
+                .when(leave(PARTICIPANT, "s2", RoomLeaveReason.LEFT))
+                .expectSuccessfulHandlerExecution()
+                .expectNoEvents();
+    }
+
+    @Test
+    void offlineLeave_clearsPresenceWhateverTheSession() {
+        fixture.given(created(), entered(INITIATOR_PLAYER, "s1"))
+                .when(leave(INITIATOR, null, RoomLeaveReason.OFFLINE))
+                .expectEventsMatching(
+                        JoutioAxonMatchers.singlePayloadMatching(
+                                RoomEvent.RoomLeftEvent.class,
+                                e ->
+                                        ((RoomEvent.RoomLeftEvent) e).reason()
+                                                == RoomLeaveReason.OFFLINE));
+    }
+
+    @Test
+    void offlineLeave_oncePreparationStarted_isIgnored() {
+        fixture.given(
+                        created(),
+                        entered(INITIATOR_PLAYER, "s1"),
+                        entered(PARTICIPANT_PLAYER, "s2"),
+                        allPresent())
+                .when(leave(PARTICIPANT, null, RoomLeaveReason.OFFLINE))
+                .expectSuccessfulHandlerExecution()
+                .expectNoEvents();
+    }
+
+    @Test
+    void rejoin_afterAnObservedLeave_opensANewPresence() {
+        fixture.given(
+                        created(),
+                        entered(INITIATOR_PLAYER, "s1"),
+                        new RoomEvent.RoomLeftEvent(
+                                ROOM_ID, INITIATOR, Instant.now(), "s1", RoomLeaveReason.LEFT))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, "s3"))
+                .expectEventsMatching(
+                        JoutioAxonMatchers.singlePayloadMatching(
+                                RoomEvent.RoomEnteredEvent.class,
+                                e -> "s3".equals(((RoomEvent.RoomEnteredEvent) e).presenceId())));
     }
 
     @Test
@@ -440,7 +540,7 @@ class RoomAggregateTest {
     @Test
     void purgeRoom_leavesAggregateDeleted_soItCannotBeReloaded() {
         fixture.given(created(), new RoomEvent.RoomPurgedEvent(ROOM_ID, Instant.now()))
-                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, PARTICIPANT, PARTICIPANT_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, PARTICIPANT, PARTICIPANT_PLAYER, null))
                 .expectException(
                         org.axonframework.modelling.command.AggregateNotFoundException.class);
     }
@@ -586,12 +686,22 @@ class RoomAggregateTest {
     }
 
     private static RoomEvent.RoomEnteredEvent entered(RoomPlayer player) {
-        return new RoomEvent.RoomEnteredEvent(ROOM_ID, player.playerId(), player, Instant.now());
+        return new RoomEvent.RoomEnteredEvent(ROOM_ID, player.playerId(), player, Instant.now(), null);
+    }
+
+    private static RoomEvent.RoomEnteredEvent entered(RoomPlayer player, String presenceId) {
+        return new RoomEvent.RoomEnteredEvent(
+                ROOM_ID, player.playerId(), player, Instant.now(), presenceId);
+    }
+
+    private static RoomCommand.LeaveRoomCommand leave(
+            String playerId, String presenceId, RoomLeaveReason reason) {
+        return new RoomCommand.LeaveRoomCommand(ROOM_ID, playerId, presenceId, reason);
     }
 
     private static RoomEvent.RoomEnteredEvent enteredBot() {
         return new RoomEvent.RoomEnteredEvent(
-                ROOM_ID, JoutioConstants.SYSTEM_USER_ID, null, Instant.now());
+                ROOM_ID, JoutioConstants.SYSTEM_USER_ID, null, Instant.now(), null);
     }
 
     private static RoomEvent.RoomAllPlayersPresentEvent allPresent() {

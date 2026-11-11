@@ -6,6 +6,7 @@ import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.exception.RoomExceptions;
 import com.joutio.matchmaking.domain.model.RoomDeadline;
+import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomStatus;
 import com.joutio.matchmaking.domain.model.RoomWizzRules;
 import com.joutio.microservice.core.domain.constant.JoutioConstants;
@@ -27,10 +28,12 @@ import java.time.Instant;
  * contre le bot.
  *
  * <p>Le créateur est l'initiateur ; le second humain devient participant lors de son
- * <b>apparition</b> dans la salle ({@code JoinRoomCommand}, émis par le client). Seule exception au
- * client-driven : le bot, joint automatiquement par la saga quand la salle est {@code vsBot}.
- * Aucune saga ne simule une action utilisateur, et aucun port externe n'est interrogé dans les
- * handlers. Le statut suit l'avancement de la préparation ({@link RoomStatus}) ; une préparation
+ * <b>apparition</b> dans la salle ({@code JoinRoomCommand}). La présence est observée par le
+ * serveur, jamais déclarée par l'interface : le BFF émet l'entrée et la sortie selon l'abonnement
+ * du joueur au canal de présence du salon, et chaque présence porte la session qui l'a ouverte
+ * ({@code presenceId}) — une sortie ne s'applique qu'à sa propre session. Le bot d'une salle
+ * {@code vsBot} est présent dès la création. Aucune saga ne simule une action utilisateur, et
+ * aucun port externe n'est interrogé dans les handlers. Le statut suit l'avancement de la préparation ({@link RoomStatus}) ; une préparation
  * engagée ne peut plus être quittée, mais l'initiateur peut toujours annuler. Un état terminal est
  * purgé par la saga après rétention, puis {@code markDeleted}.
  */
@@ -47,6 +50,11 @@ public class RoomAggregate {
     private RoomStatus status;
     private boolean initiatorPresent;
     private boolean participantPresent;
+
+    /** Session temps réel qui porte la présence de chaque joueur (nulle : ancien client, bot). */
+    private String initiatorPresenceId;
+
+    private String participantPresenceId;
 
     /** Dernière relance (« wizz ») de chaque joueur : cadence anti-spam, jamais bloquante. */
     private Instant initiatorWizzedAt;
@@ -88,14 +96,16 @@ public class RoomAggregate {
         if (command.vsBot()) {
             apply(
                     new RoomEvent.RoomEnteredEvent(
-                            command.roomId(), JoutioConstants.SYSTEM_USER_ID, null, now));
+                            command.roomId(), JoutioConstants.SYSTEM_USER_ID, null, now, null));
         }
     }
 
     /**
      * Apparition d'un joueur dans la salle : présence temps réel et, pour le second humain,
      * enregistrement implicite comme participant. Idempotent ; quand les deux sont présents, la
-     * salle passe en préparation ({@code FETCHING_PLAYERS}).
+     * salle passe en préparation ({@code FETCHING_PLAYERS}). Un joueur déjà présent qui revient
+     * par une autre session (reconnexion, autre onglet) en reprend la présence tant que la salle
+     * attend : la sortie de l'ancienne session ne le fera plus sortir.
      */
     @CommandHandler
     public void handle(RoomCommand.JoinRoomCommand command) {
@@ -109,6 +119,15 @@ public class RoomAggregate {
         boolean alreadyPresent =
                 command.playerId().equals(initiatorId) ? initiatorPresent : participantPresent;
         if (known && alreadyPresent) {
+            if (takesOverPresence(command.playerId(), command.presenceId())) {
+                apply(
+                        new RoomEvent.RoomEnteredEvent(
+                                roomId,
+                                command.playerId(),
+                                command.player(),
+                                Instant.now(),
+                                command.presenceId()));
+            }
             return;
         }
         if (!known && StringUtils.isNotBlank(participantId)) {
@@ -122,7 +141,9 @@ public class RoomAggregate {
 
         Instant now = Instant.now();
         logger.info("Player entering room: roomId={}, playerId={}", roomId, command.playerId());
-        apply(new RoomEvent.RoomEnteredEvent(roomId, command.playerId(), command.player(), now));
+        apply(
+                new RoomEvent.RoomEnteredEvent(
+                        roomId, command.playerId(), command.player(), now, command.presenceId()));
         if (bothPresent()) {
             // La préparation démarre immédiatement ; la partie sera créée dès les questions
             // tirées (plus de compte à rebours de lancement).
@@ -131,10 +152,12 @@ public class RoomAggregate {
     }
 
     /**
-     * Sortie <b>non destructive</b> avant l'engagement : le joueur quitte la salle mais le
-     * participant reste enregistré (retour possible). Refusée dès que la préparation est lancée
-     * (les deux présents) — le duel est engagé. La salle ne se ferme que par {@code
-     * CancelRoomCommand} (initiateur) ou expiration.
+     * Sortie <b>non destructive</b> avant l'engagement : le joueur n'est plus présent mais le
+     * participant reste enregistré (retour possible). Constatée par le serveur, elle ne s'applique
+     * qu'à la présence ouverte par la même session et reste sans effet une fois la préparation
+     * lancée (le duel est engagé). Une sortie sans session (ancien client, {@code POST /leave})
+     * garde l'ancien contrat : inconditionnelle, refusée pendant la préparation. La salle ne se
+     * ferme que par {@code CancelRoomCommand} (initiateur) ou expiration.
      */
     @CommandHandler
     public void handle(RoomCommand.LeaveRoomCommand command) {
@@ -142,15 +165,36 @@ public class RoomAggregate {
             return;
         }
         requireParticipant(command.playerId());
+        boolean observed = command.presenceId() != null;
         if (status != RoomStatus.WAITING_PLAYERS) {
+            if (observed || command.reason() == RoomLeaveReason.OFFLINE) {
+                return;
+            }
             throw new RoomExceptions.RoomPreparationStartedProblem(roomId);
         }
-        boolean alreadyAbsent =
-                command.playerId().equals(initiatorId) ? !initiatorPresent : !participantPresent;
-        if (alreadyAbsent) {
+        if (!isPresent(command.playerId())) {
             return;
         }
-        apply(new RoomEvent.RoomLeftEvent(roomId, command.playerId(), Instant.now()));
+        if (observed && !command.presenceId().equals(presenceIdOf(command.playerId()))) {
+            logger.debug(
+                    "Stale room leave ignored: roomId={}, playerId={}, presenceId={}",
+                    roomId,
+                    command.playerId(),
+                    command.presenceId());
+            return;
+        }
+        logger.info(
+                "Player leaving room: roomId={}, playerId={}, reason={}",
+                roomId,
+                command.playerId(),
+                command.reason());
+        apply(
+                new RoomEvent.RoomLeftEvent(
+                        roomId,
+                        command.playerId(),
+                        Instant.now(),
+                        command.presenceId(),
+                        command.reason()));
     }
 
     /**
@@ -348,6 +392,17 @@ public class RoomAggregate {
                         < 0;
     }
 
+    private String presenceIdOf(String playerId) {
+        return playerId.equals(initiatorId) ? initiatorPresenceId : participantPresenceId;
+    }
+
+    /** Une nouvelle session reprend la présence d'un joueur déjà présent, tant que la salle attend. */
+    private boolean takesOverPresence(String playerId, String presenceId) {
+        return presenceId != null
+                && status == RoomStatus.WAITING_PLAYERS
+                && !presenceId.equals(presenceIdOf(playerId));
+    }
+
     private boolean bothPresent() {
         return initiatorPresent && participantPresent && StringUtils.isNotBlank(participantId);
     }
@@ -377,6 +432,7 @@ public class RoomAggregate {
     public void on(RoomEvent.RoomEnteredEvent event) {
         if (event.playerId().equals(initiatorId)) {
             this.initiatorPresent = true;
+            this.initiatorPresenceId = event.presenceId();
             return;
         }
         if (StringUtils.isBlank(participantId)) {
@@ -384,6 +440,7 @@ public class RoomAggregate {
         }
         if (event.playerId().equals(participantId)) {
             this.participantPresent = true;
+            this.participantPresenceId = event.presenceId();
         }
     }
 
@@ -417,8 +474,10 @@ public class RoomAggregate {
         // Le participant reste enregistré : il peut revenir (ré-apparition dans la salle).
         if (event.playerId().equals(initiatorId)) {
             this.initiatorPresent = false;
+            this.initiatorPresenceId = null;
         } else if (event.playerId().equals(participantId)) {
             this.participantPresent = false;
+            this.participantPresenceId = null;
         }
     }
 

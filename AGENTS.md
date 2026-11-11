@@ -33,8 +33,16 @@ Trois responsabilités **distinctes**, chacune avec son agrégat :
   (identifiants, pas d'auto-défi, statut). À l'acceptation, `ChallengeSaga` crée la salle ; le lien
   est **déterministe** (`ChallengeRoomId`) et vit dans le read model, jamais dans l'agrégat.
 - **Salle** (`RoomAggregate`) : deux humains (salle partagée ou appariement) **ou** un humain
-  contre le bot, **apparition client-driven**. Le client émet `JoinRoomCommand` (commande unique)
-  quand l'utilisateur est réellement dans la salle : elle porte la présence et, pour le second
+  contre le bot, **présence observée par le serveur** (2026-11-11) : l'interface ne déclare ni
+  l'entrée ni la sortie. Le client s'abonne au **canal de présence** du salon
+  (`/topic/rooms/{id}/presence`) tant que l'écran est ouvert ; le BFF observe l'abonnement et émet
+  `JoinRoomCommand` (abonnement) et `LeaveRoomCommand` (désabonnement `LEFT`, connexion fermée
+  `DISCONNECTED` après 10 s de grâce). Chaque présence porte la **session** qui l'a ouverte
+  (`presenceId`) : une sortie ne s'applique qu'à sa session, si bien qu'une sortie tardive d'une
+  ancienne instance après une reconnexion est ignorée, et un joueur déjà présent qui revient par une
+  autre session reprend la présence. Filet de sécurité : `OfflinePlayerRoomHandler` fait sortir
+  (`OFFLINE`) un joueur que `joutio-profile` déclare hors ligne (`PlayerWentOfflineEvent`, instance
+  tombée). `JoinRoomCommand` porte la présence et, pour le second
   joueur, l'enregistrement du participant, **avec le snapshot de profil `RoomPlayer` préparé par la
   façade** (le client ne le fournit jamais ; voir `command-preparation.md`). Seule exception
   système : le bot est présent **dès la
@@ -45,9 +53,10 @@ Trois responsabilités **distinctes**, chacune avec son agrégat :
   **crée immédiatement en fin de préparation** (aucun compte à rebours de
   lancement), avance le statut de préparation et, en cas d'échec, **annonce l'échec** aux
   joueurs présents (`RoomFailedEvent` → `ROOM_FAILED`). Un salon non lancé expire après **1 jour** ;
-  tant que la préparation n'est pas engagée, une **sortie explicite est non destructive** (le
-  joueur peut revenir) ; dès que les deux sont présents, la sortie est refusée — l'initiateur peut
-  toujours **annuler**. Un joueur présent peut **relancer** (« wizz ») l'autre joueur humain
+  tant que la préparation n'est pas engagée, une **sortie est non destructive** (le
+  joueur peut revenir) ; dès que les deux sont présents, une sortie observée est sans effet (une
+  sortie sans session, ancien `POST /leave`, reste refusée) — l'initiateur peut toujours
+  **annuler**. Un joueur présent peut **relancer** (« wizz ») l'autre joueur humain
   **absent** pour l'inviter à rejoindre la salle : pur temps réel (aucune préparation déclenchée),
   cadence **10 s par joueur** (`RoomWizzRules`), jamais de cible bot — la relance nourrit la
   notification personnelle de la cible (`WIZZ`, cf. `joutio-notification`) et le temps réel de la
@@ -95,7 +104,7 @@ requêtes renvoient des `CompletableFuture` dont le callback envoie une commande
 ## 3. Commandes / queries (bus) et sagas
 
 - `MatchmakingCommand` : `CreateMatchmakingCommand` (+ `TopicLanguageCoverage` préparée par la
-  façade), `CancelMatchmakingCommand`,
+  façade), `CancelMatchmakingCommand` (+ `reason` : `PLAYER_CANCELLED` par défaut, `PLAYER_LEFT` quand le BFF constate le départ),
   `MarkMatchmakingMatchedCommand` (roomId), `FailMatchmakingCommand`, `PurgeMatchmakingCommand`.
 - `ChallengeCommand` : `CreateChallengeCommand`, `Accept/Decline/Cancel/Expire/Purge`, `Start`
   (commande interne de saga : la partie du défi a été créée).
@@ -105,8 +114,9 @@ requêtes renvoient des `CompletableFuture` dont le callback envoie une commande
   **a abouti sur une partie** (distinct de l'acceptation, qui ne garantit pas la présence de
   l'invité). Consommé par `joutio-profile` (badge **Défis**) ; non exposé par le BFF.
 - `RoomCommand` : `CreateRoomCommand` (`vsBot`, `botDifficulty`), `JoinRoomCommand` (apparition,
-  + snapshot `RoomPlayer`),
-  `LeaveRoomCommand` (refusée après engagement), `CancelRoomCommand` (toujours possible tant que
+  + snapshot `RoomPlayer`, + `presenceId`),
+  `LeaveRoomCommand` (+ `presenceId`, `RoomLeaveReason` `LEFT|DISCONNECTED|OFFLINE` ; sans effet
+  pour une autre session ou après engagement, refusée après engagement si sans session), `CancelRoomCommand` (toujours possible tant que
   non terminale), `WizzRoomCommand` (relance d'un adversaire absent — émetteur **présent**,
   cible **humaine absente**, cadence 10 s par joueur ; refusée sinon, ignorée en préparation
   engagée/salle terminale),
@@ -116,9 +126,9 @@ requêtes renvoient des `CompletableFuture` dont le callback envoie une commande
   `CompleteRoomCommand`, `FailRoomCommand`, `ExpireRoomCommand`, `PurgeRoomCommand`.
 - `MatchmakingEvent.MatchmakingStartedEvent` porte `TopicLanguageCoverage`.
 - `RoomEvent` : `RoomCreatedEvent` (`vsBot`, `botDifficulty`), `RoomEnteredEvent` (+ snapshot
-  `RoomPlayer`, `null` pour le bot), `RoomAllPlayersPresentEvent`, `RoomPlayersLoadedEvent`,
+  `RoomPlayer`, `null` pour le bot, + `presenceId`), `RoomAllPlayersPresentEvent`, `RoomPlayersLoadedEvent`,
   `RoomPlayedQuestionsLoadedEvent` (+ ids joués), `RoomQuestionsLoadedEvent` (+ `DrawnQuestion`),
-  `RoomGameCreatedEvent`, `RoomLeftEvent`, `RoomWizzedEvent` (émetteur, cible, instant — pur temps
+  `RoomGameCreatedEvent`, `RoomLeftEvent` (+ `presenceId`, `reason`), `RoomWizzedEvent` (émetteur, cible, instant — pur temps
   réel, aucun effet de préparation), `RoomCancelledEvent`,
   `RoomCompletedEvent`, `RoomFailedEvent`, `RoomExpiredEvent`, `RoomPurgedEvent`.
 - `MatchmakingQuery`, `ChallengeQuery`, `RoomQuery` (`GetRoomById`, `GetMyOpenRooms`,

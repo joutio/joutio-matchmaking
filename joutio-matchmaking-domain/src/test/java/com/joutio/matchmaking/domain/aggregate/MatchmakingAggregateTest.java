@@ -58,17 +58,27 @@ class MatchmakingAggregateTest {
     @Test
     void cancelIsIgnoredAfterMatch() {
         fixture.given(started(), matched())
-                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER))
+                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER, null))
                 .expectNoEvents();
     }
 
     @Test
     void cancel_appliesCancelledEvent() {
         fixture.given(started())
-                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER))
+                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER, null))
                 .expectEventsMatching(JoutioAxonMatchers.hasPayloadMatching(
                         MatchmakingEvent.MatchmakingCancelledEvent.class,
                         e -> ((MatchmakingEvent.MatchmakingCancelledEvent) e).matchmakingId().equals(MM_ID)));
+    }
+
+    @Test
+    void cancel_byTheServer_keepsItsReason() {
+        fixture.given(started())
+                .when(new MatchmakingCommand.CancelMatchmakingCommand(
+                        MM_ID, PLAYER, MatchmakingCommand.CancelMatchmakingCommand.PLAYER_LEFT))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        MatchmakingEvent.MatchmakingCancelledEvent.class,
+                        e -> "PLAYER_LEFT".equals(((MatchmakingEvent.MatchmakingCancelledEvent) e).reason())));
     }
 
     @Test
@@ -83,7 +93,7 @@ class MatchmakingAggregateTest {
     @Test
     void purge_leavesAggregateDeleted_soItCannotBeReloaded() {
         fixture.given(started(), new MatchmakingEvent.MatchmakingPurgedEvent(MM_ID, java.time.Instant.now()))
-                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER))
+                .when(new MatchmakingCommand.CancelMatchmakingCommand(MM_ID, PLAYER, null))
                 .expectException(org.axonframework.modelling.command.AggregateNotFoundException.class);
     }
 

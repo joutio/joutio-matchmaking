@@ -28,11 +28,18 @@ public interface MatchmakingCommand {
     ) implements MatchmakingCommand {
     }
 
-    /** Annule une recherche (action du joueur). */
+    /**
+     * Annule une recherche : « Annuler la recherche » ({@code PLAYER_CANCELLED}, défaut si {@code
+     * reason} est nul) ou départ constaté par le serveur — écran quitté, connexion perdue
+     * ({@code PLAYER_LEFT}).
+     */
     record CancelMatchmakingCommand(
             @TargetAggregateIdentifier String matchmakingId,
-            String playerId
+            String playerId,
+            String reason
     ) implements MatchmakingCommand {
+        public static final String PLAYER_CANCELLED = "PLAYER_CANCELLED";
+        public static final String PLAYER_LEFT = "PLAYER_LEFT";
     }
 
     /** Commande interne (saga) : la recherche a abouti (salle d'appariement créée). */

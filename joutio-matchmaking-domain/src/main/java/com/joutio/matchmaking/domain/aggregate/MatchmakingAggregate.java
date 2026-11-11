@@ -67,7 +67,10 @@ public class MatchmakingAggregate {
         if (!command.playerId().equals(playerId)) {
             throw new MatchmakingExceptions.PlayerNotInMatchmakingProblem(matchmakingId, command.playerId());
         }
-        apply(new MatchmakingEvent.MatchmakingCancelledEvent(matchmakingId, "PLAYER_CANCELLED", Instant.now()));
+        String reason = command.reason() == null
+                ? MatchmakingCommand.CancelMatchmakingCommand.PLAYER_CANCELLED
+                : command.reason();
+        apply(new MatchmakingEvent.MatchmakingCancelledEvent(matchmakingId, reason, Instant.now()));
     }
 
     @CommandHandler

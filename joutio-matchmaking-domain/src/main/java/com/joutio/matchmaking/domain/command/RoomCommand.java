@@ -1,6 +1,7 @@
 package com.joutio.matchmaking.domain.command;
 
 import com.joutio.matchmaking.domain.model.DrawnQuestion;
+import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
 
 import org.axonframework.modelling.command.TargetAggregateIdentifier;
@@ -34,22 +35,33 @@ public interface RoomCommand {
 
     /**
      * Le joueur <b>apparaît</b> dans la salle : présence temps réel et, pour le second humain,
-     * enregistrement implicite comme participant. Commande unique — le client l'émet quand
-     * l'utilisateur est réellement dans la salle ; aucune saga ne le fait à sa place (seule
-     * exception : le join automatique du bot sur une salle {@code vsBot}). {@code player} est le
-     * snapshot préparé par la façade (profil + progression) : la salle ne fait aucune I/O pour
-     * résoudre les joueurs.
+     * enregistrement implicite comme participant. Émise par le BFF quand il observe l'abonnement
+     * du joueur au canal de présence du salon ; aucune saga ne le fait à sa place (seule
+     * exception : le bot d'une salle {@code vsBot}). {@code player} est le snapshot préparé par la
+     * façade (profil + progression) : la salle ne fait aucune I/O pour résoudre les joueurs.
+     * {@code presenceId} identifie la session temps réel qui porte la présence (nullable : ancien
+     * client par {@code POST /join}).
      */
     record JoinRoomCommand(
-            @TargetAggregateIdentifier String roomId, String playerId, RoomPlayer player)
+            @TargetAggregateIdentifier String roomId,
+            String playerId,
+            RoomPlayer player,
+            String presenceId)
             implements RoomCommand {}
 
     /**
-     * Sortie <b>non destructive</b> : le joueur quitte la salle mais reste participant ; il peut
-     * revenir jusqu'à l'expiration. Autorisée uniquement tant que les deux joueurs ne sont pas
-     * présents ({@code WAITING_PLAYERS}) : une préparation engagée ne peut plus être quittée.
+     * Le joueur n'est plus présent : sortie <b>non destructive</b> (il reste participant et peut
+     * revenir jusqu'à l'expiration). Constatée par le serveur ({@code reason}) ; ne s'applique
+     * qu'à la présence ouverte par la même session ({@code presenceId}), si bien qu'une sortie
+     * tardive d'une ancienne session est sans effet. Sans effet aussi une fois la préparation
+     * engagée. {@code presenceId} nul : sortie inconditionnelle d'un ancien client
+     * ({@code POST /leave}), refusée pendant la préparation comme avant.
      */
-    record LeaveRoomCommand(@TargetAggregateIdentifier String roomId, String playerId)
+    record LeaveRoomCommand(
+            @TargetAggregateIdentifier String roomId,
+            String playerId,
+            String presenceId,
+            RoomLeaveReason reason)
             implements RoomCommand {}
 
     /**
