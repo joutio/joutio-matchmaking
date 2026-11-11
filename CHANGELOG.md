@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/joutio/joutio-matchmaking/compare/v1.1.0...v1.2.0) (2026-11-11)
+
+### Features
+
+* room presence observed by the server, with sessions and leave reasons ([51005b1](https://github.com/joutio/joutio-matchmaking/commit/51005b13b7858f89e1605ffb8c8d68f0924e2e7b))
+
 ## [1.1.0](https://github.com/joutio/joutio-matchmaking/compare/v1.0.0...v1.1.0) (2026-11-08)
 
 ### Features
