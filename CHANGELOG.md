@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/joutio/joutio-matchmaking/compare/v1.2.0...v1.3.0) (2026-11-12)
+
+### Features
+
+* **matchmaking:** per-step room failure reasons with logged cause and metric ([67fbb34](https://github.com/joutio/joutio-matchmaking/commit/67fbb341c03d425b36cc3dea45761d260cbe3a37))
+
 ## [1.2.0](https://github.com/joutio/joutio-matchmaking/compare/v1.1.0...v1.2.0) (2026-11-11)
 
 ### Features
