@@ -211,16 +211,22 @@ la traduction vers `game.GameQuestion` est faite par la saga émettrice elle-mê
   déduite de la **maîtrise du sujet** moyenne
   des joueurs (`QuestionLevelRules.targetForTopicXp` : <300 EASY, 300–999 MEDIUM, 1 000–2 499 HARD, ≥2 500 EXPERT) ; chaque étape
   avance le statut de la salle. Chaque callback envoie une commande (`Mark*` portant le résultat,
-  ou `FailRoomCommand`) — jamais de mutation de la saga depuis le callback ; timeout d'étape
-  (`ROOM_PREPARATION_STEP_TIMEOUT`, 10 s) → `FailRoomCommand("ROOM_PREPARATION_FAILED")`.
-  Questions insuffisantes → `FailRoomCommand` immédiat
-  (`TOPIC_NOT_AVAILABLE_IN_LANGUAGE`).
+  ou `FailRoomCommand`) — jamais de mutation de la saga depuis le callback. Chaque étape a ses
+  **motifs d'échec** (`RoomFailureReason`, domaine) : erreur → `PLAYED_QUESTIONS_FAILED` /
+  `QUESTION_DRAW_FAILED` / `TOPIC_CHECK_FAILED`, timeout d'étape (`ROOM_PREPARATION_STEP_TIMEOUT`,
+  10 s) → `PLAYED_QUESTIONS_TIMEOUT` / `QUESTION_DRAW_TIMEOUT`. Questions insuffisantes →
+  `FailRoomCommand` immédiat (`TOPIC_NOT_AVAILABLE_IN_LANGUAGE`).
+- **Observabilité des échecs** (2026-11-12) : tout échec passe par `RoomFailureRecorder` — une
+  ligne WARN `Échec de salle: roomId, reason, step, topicId, languages…, cause=<exception déballée>`
+  et le compteur `joutio_room_failures_total{reason}`. Le motif voyage jusqu'au client
+  (`ROOM_FAILED.reason` → `Room.failureReason`, `roomFailureKind` de `@joutio/client-domain`) qui
+  affiche un message adapté (langue, sujet indisponible, délai, générique).
 - `RoomQuestionsLoadedEvent` → la saga envoie `CreateGameCommand` en **fire-and-forget**
   (HUMAN/HUMAN ou HUMAN/BOT, commande assemblée par `GamePreparationService` — le mapping local →
   `game.GameQuestion` ne vit pas dans la saga) et s'associe au `gameId` ; `GameCreatedEvent` →
   `MarkRoomGameCreatedCommand` → `GAME_CREATED`, puis `CompleteRoomCommand`. Accusé absent sous
   **30 s** → `FailRoomCommand("GAME_CREATION_TIMEOUT")` ; exceptions synchrones (mapping, envoi) →
-  `FailRoomCommand("ROOM_PREPARATION_FAILED")` (`@ExceptionHandler`).
+  `FailRoomCommand("ROOM_PREPARATION_FAILED")` (`@ExceptionHandler`, cause consignée).
 - `RoomLeftEvent` (sortie non destructive avant engagement) → la salle reste ouverte, le joueur
   peut revenir. L'agrégat refuse la sortie ensuite (`RoomPreparationStartedProblem`).
 - `RoomCancelled|Expired|Failed|Completed` → `CANCELLED`/`EXPIRED`/`FAILED`/`COMPLETED` + purge planifiée
@@ -258,7 +264,8 @@ la traduction vers `game.GameQuestion` est faite par la saga émettrice elle-mê
 ### Disponibilité et reprise des salles — 2026-11-08
 
 `TopicAvailabilityPort` vérifie le sujet de façon asynchrone avant l'envoi de `CreateGameCommand`.
-Un brouillon ou un échec de vérification fait échouer la salle (`TOPIC_UNAVAILABLE`). Aucun I/O dans
+Un brouillon fait échouer la salle (`TOPIC_UNAVAILABLE`), une erreur ou un délai de vérification
+aussi (`TOPIC_CHECK_FAILED`). Aucun I/O dans
 les agrégats, aucun blocage de la saga. `GetMyOpenRooms` inclut désormais les salles humaines encore
 ouvertes et en préparation, pour initiateur, invité nominatif ou participant ; les statuts terminaux
 et salles expirées restent exclus. Les gardes de quota continuent de compter seulement `WAITING_PLAYERS`.

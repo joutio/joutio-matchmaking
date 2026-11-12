@@ -8,6 +8,7 @@ import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.model.DrawnQuestion;
 import com.joutio.matchmaking.domain.model.DrawnQuestionDifficulty;
 import com.joutio.matchmaking.domain.model.QuestionLevelRules;
+import com.joutio.matchmaking.domain.model.RoomFailureReason;
 import com.joutio.matchmaking.domain.model.RoomDeadline;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
 import com.joutio.matchmaking.domain.port.out.PlayedQuestionsPort;
@@ -80,6 +81,8 @@ public class RoomSaga {
     @Autowired private transient PlayedQuestionsPort playedQuestionsPort;
 
     @Autowired private transient GamePreparationService gamePreparationService;
+
+    @Autowired private transient RoomFailureRecorder failureRecorder;
 
     @Getter @Setter private String roomId;
 
@@ -171,33 +174,36 @@ public class RoomSaga {
         this.drawnQuestions = event.questions();
         int drawnCount = drawnQuestions == null ? 0 : drawnQuestions.size();
         if (drawnCount < GameRules.TOTAL_ROUNDS) {
-            logger.warn(
-                    "Thème insuffisant dans les langues requises, échec de la salle: roomId={},"
-                            + " topicId={}, questions={}",
-                    roomId,
-                    topicId,
-                    drawnCount);
-            commandGateway.send(
-                    new RoomCommand.FailRoomCommand(roomId, "TOPIC_NOT_AVAILABLE_IN_LANGUAGE"));
+            fail(
+                    RoomFailureReason.TOPIC_NOT_AVAILABLE_IN_LANGUAGE,
+                    drawContext() + ", drawn=" + drawnCount + ", required=" + GameRules.TOTAL_ROUNDS,
+                    null);
             return;
         }
         logger.info("Préparation terminée, création de la partie: roomId={}", roomId);
         String currentRoomId = roomId;
+        String context = "step=topic-availability, topicId=" + topicId;
         CommandGateway currentGateway = commandGateway;
+        RoomFailureRecorder recorder = failureRecorder;
         topicAvailability
                 .playable(topicId)
                 .orTimeout(
                         RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(),
                         TimeUnit.MILLISECONDS)
                 .whenComplete(
-                        (playable, error) ->
+                        (playable, error) -> {
+                            if (error == null && Boolean.TRUE.equals(playable)) {
                                 currentGateway.send(
-                                        error == null && Boolean.TRUE.equals(playable)
-                                                ? new RoomCommand
-                                                        .ConfirmRoomTopicAvailabilityCommand(
-                                                        currentRoomId)
-                                                : new RoomCommand.FailRoomCommand(
-                                                        currentRoomId, "TOPIC_UNAVAILABLE")));
+                                        new RoomCommand.ConfirmRoomTopicAvailabilityCommand(
+                                                currentRoomId));
+                                return;
+                            }
+                            String reason =
+                                    error == null
+                                            ? RoomFailureReason.TOPIC_UNAVAILABLE
+                                            : RoomFailureReason.TOPIC_CHECK_FAILED;
+                            fail(currentGateway, recorder, currentRoomId, reason, context, error);
+                        });
     }
 
     @SagaEventHandler(associationProperty = "roomId")
@@ -227,21 +233,29 @@ public class RoomSaga {
             return;
         }
         String currentRoomId = this.roomId;
+        Set<String> players = humanPlayerIds();
+        String context = "step=played-questions, topicId=" + topicId + ", players=" + players;
         CommandGateway currentGateway = this.commandGateway;
+        RoomFailureRecorder recorder = this.failureRecorder;
         playedQuestionsPort
-                .findPlayedQuestionIds(topicId, humanPlayerIds())
+                .findPlayedQuestionIds(topicId, players)
                 .orTimeout(
                         RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(),
                         TimeUnit.MILLISECONDS)
                 .whenComplete(
-                        (playedIds, failure) ->
+                        (playedIds, failure) -> {
+                            if (failure == null) {
                                 currentGateway.send(
-                                        failure == null
-                                                ? new RoomCommand
-                                                        .MarkRoomPlayedQuestionsLoadedCommand(
-                                                        currentRoomId, playedIds)
-                                                : new RoomCommand.FailRoomCommand(
-                                                        currentRoomId, "ROOM_PREPARATION_FAILED")));
+                                        new RoomCommand.MarkRoomPlayedQuestionsLoadedCommand(
+                                                currentRoomId, playedIds));
+                                return;
+                            }
+                            String reason =
+                                    RoomFailureRecorder.isTimeout(failure)
+                                            ? RoomFailureReason.PLAYED_QUESTIONS_TIMEOUT
+                                            : RoomFailureReason.PLAYED_QUESTIONS_FAILED;
+                            fail(currentGateway, recorder, currentRoomId, reason, context, failure);
+                        });
     }
 
     /** Joueurs humains de la salle (le bot n'a pas d'historique). */
@@ -267,21 +281,68 @@ public class RoomSaga {
                         initiatorProfile.topicXp(),
                         participantProfile == null ? null : participantProfile.topicXp());
         Set<String> excluded = playedQuestionIds == null ? Set.of() : playedQuestionIds;
+        Set<Language> languages = languagesOf(initiatorProfile, participantProfile);
         String currentRoomId = this.roomId;
+        String context = drawContext() + ", target=" + target + ", excluded=" + excluded.size();
         CommandGateway currentGateway = this.commandGateway;
+        RoomFailureRecorder recorder = this.failureRecorder;
+        logger.info(
+                "Tirage des questions demandé: roomId={}, topicId={}, languages={}, target={},"
+                        + " excluded={}",
+                currentRoomId,
+                topicId,
+                languages,
+                target,
+                excluded.size());
         questionDrawPort
-                .draw(topicId, languagesOf(initiatorProfile, participantProfile), target, excluded)
+                .draw(topicId, languages, target, excluded)
                 .orTimeout(
                         RoomDeadline.ROOM_PREPARATION_STEP_TIMEOUT.toMillis(),
                         TimeUnit.MILLISECONDS)
                 .whenComplete(
-                        (questions, failure) ->
+                        (questions, failure) -> {
+                            if (failure == null) {
                                 currentGateway.send(
-                                        failure == null
-                                                ? new RoomCommand.MarkRoomQuestionsLoadedCommand(
-                                                        currentRoomId, questions)
-                                                : new RoomCommand.FailRoomCommand(
-                                                        currentRoomId, "ROOM_PREPARATION_FAILED")));
+                                        new RoomCommand.MarkRoomQuestionsLoadedCommand(
+                                                currentRoomId, questions));
+                                return;
+                            }
+                            String reason =
+                                    RoomFailureRecorder.isTimeout(failure)
+                                            ? RoomFailureReason.QUESTION_DRAW_TIMEOUT
+                                            : RoomFailureReason.QUESTION_DRAW_FAILED;
+                            fail(currentGateway, recorder, currentRoomId, reason, context, failure);
+                        });
+    }
+
+    /** Contexte du tirage pour les logs d'échec : sujet, langues requises, salle bot ou non. */
+    private String drawContext() {
+        return "step=question-draw, topicId="
+                + topicId
+                + ", languages="
+                + languagesOf(initiatorProfile, participantProfile)
+                + ", vsBot="
+                + vsBot;
+    }
+
+    /** Échec depuis le thread de la saga : consigné (log + métrique) puis annoncé à la salle. */
+    private void fail(String reason, String context, Throwable cause) {
+        fail(commandGateway, failureRecorder, roomId, reason, context, cause);
+    }
+
+    /**
+     * Échec depuis un callback asynchrone : n'utilise que des références capturées (la saga n'est
+     * jamais lue ni mutée hors de son thread de traitement).
+     */
+    private static void fail(
+            CommandGateway gateway,
+            RoomFailureRecorder recorder,
+            String roomId,
+            String reason,
+            String context,
+            Throwable cause) {
+        recorder.record(roomId, reason, context, cause);
+        gateway.send(new RoomCommand.FailRoomCommand(roomId, reason));
     }
 
     /**
@@ -355,19 +416,20 @@ public class RoomSaga {
      */
     @DeadlineHandler(deadlineName = RoomDeadline.ROOM_GAME_CREATION)
     public void onGameCreationTimeout() {
-        logger.warn("Accusé de création de partie absent: roomId={}, gameId={}", roomId, gameId);
-        commandGateway.send(new RoomCommand.FailRoomCommand(roomId, "GAME_CREATION_TIMEOUT"));
+        fail(
+                RoomFailureReason.GAME_CREATION_TIMEOUT,
+                "step=game-creation, topicId=" + topicId + ", gameId=" + gameId,
+                null);
     }
 
     /**
      * Échec synchrone d'un handler de la saga (mapping, envoi de commande) : la salle échoue au
      * lieu de bloquer le processor. Les échecs asynchrones des requêtes non bloquantes sont
-     * convertis par le callback de chaque étape ({@code ROOM_PREPARATION_FAILED}).
+     * convertis par le callback de chaque étape (motif propre à l'étape, cf. {@link RoomFailureReason}).
      */
     @ExceptionHandler
     public void on(Exception exception) {
-        logger.error("Échec de préparation de la salle: roomId={}", roomId, exception);
-        commandGateway.send(new RoomCommand.FailRoomCommand(roomId, "ROOM_PREPARATION_FAILED"));
+        fail(RoomFailureReason.ROOM_PREPARATION_FAILED, "step=saga, topicId=" + topicId, exception);
     }
 
     @DeadlineHandler(deadlineName = RoomDeadline.ROOM_EXPIRY)

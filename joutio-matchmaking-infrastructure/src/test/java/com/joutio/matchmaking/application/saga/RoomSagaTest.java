@@ -3,6 +3,8 @@ package com.joutio.matchmaking.application.saga;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import com.joutio.game.domain.command.GameCommand;
@@ -18,6 +20,8 @@ import com.joutio.matchmaking.domain.port.out.PlayedQuestionsPort;
 import com.joutio.matchmaking.domain.port.out.QuestionDrawPort;
 import com.joutio.microservice.core.domain.model.i18n.Language;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+
 import org.axonframework.commandhandling.CommandMessage;
 import org.axonframework.test.matchers.Matchers;
 import org.axonframework.test.saga.SagaTestFixture;
@@ -30,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Test in-memory de l'orchestration asynchrone de {@link RoomSaga} via {@link SagaTestFixture} :
@@ -57,12 +62,20 @@ class RoomSagaTest {
 
     private final SagaTestFixture<RoomSaga> fixture = new SagaTestFixture<>(RoomSaga.class);
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
     RoomSagaTest() {
         fixture.registerResource(playedQuestionsPort);
         fixture.registerResource(questionDrawPort);
         fixture.registerResource(topicAvailability);
         when(topicAvailability.playable(TOPIC)).thenReturn(CompletableFuture.completedFuture(true));
         fixture.registerResource(new GamePreparationService());
+        fixture.registerResource(new RoomFailureRecorder(meterRegistry));
+    }
+
+    private double failures(String reason) {
+        var counter = meterRegistry.find("joutio.room.failures").tag("reason", reason).counter();
+        return counter == null ? 0 : counter.count();
     }
 
     @Test
@@ -102,7 +115,39 @@ class RoomSagaTest {
                 .andThenAPublished(allPresent())
                 .whenPublishingA(playersLoaded())
                 .expectDispatchedCommands(
-                        new RoomCommand.FailRoomCommand(ROOM_ID, "ROOM_PREPARATION_FAILED"));
+                        new RoomCommand.FailRoomCommand(ROOM_ID, "PLAYED_QUESTIONS_FAILED"));
+
+        assertThat(failures("PLAYED_QUESTIONS_FAILED")).isEqualTo(1);
+    }
+
+    @Test
+    void playedQuestionsLoaded_whenDrawFails_failsRoomWithDrawReason() {
+        when(questionDrawPort.draw(eq(TOPIC), anySet(), any(), anySet()))
+                .thenReturn(
+                        CompletableFuture.failedFuture(
+                                new IllegalStateException("topic unavailable")));
+
+        fixture.givenAPublished(roomCreated())
+                .andThenAPublished(entered(INITIATOR_PLAYER))
+                .andThenAPublished(entered(PARTICIPANT_PLAYER))
+                .whenPublishingA(playedQuestionsLoaded(Set.of()))
+                .expectDispatchedCommands(
+                        new RoomCommand.FailRoomCommand(ROOM_ID, "QUESTION_DRAW_FAILED"));
+
+        assertThat(failures("QUESTION_DRAW_FAILED")).isEqualTo(1);
+    }
+
+    @Test
+    void playedQuestionsLoaded_whenDrawTimesOut_failsRoomWithTimeoutReason() {
+        when(questionDrawPort.draw(eq(TOPIC), anySet(), any(), anySet()))
+                .thenReturn(CompletableFuture.failedFuture(new TimeoutException()));
+
+        fixture.givenAPublished(roomCreated())
+                .andThenAPublished(entered(INITIATOR_PLAYER))
+                .andThenAPublished(entered(PARTICIPANT_PLAYER))
+                .whenPublishingA(playedQuestionsLoaded(Set.of()))
+                .expectDispatchedCommands(
+                        new RoomCommand.FailRoomCommand(ROOM_ID, "QUESTION_DRAW_TIMEOUT"));
     }
 
     @Test
@@ -210,6 +255,18 @@ class RoomSagaTest {
                 .whenPublishingA(questionsLoaded(sevenQuestions()))
                 .expectDispatchedCommands(
                         new RoomCommand.FailRoomCommand(ROOM_ID, "TOPIC_UNAVAILABLE"));
+    }
+
+    @Test
+    void questionsLoaded_whenTopicCheckFails_failsRoomWithCheckReason() {
+        when(topicAvailability.playable(TOPIC))
+                .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("bus down")));
+        fixture.givenAPublished(roomCreated())
+                .andThenAPublished(entered(INITIATOR_PLAYER))
+                .andThenAPublished(entered(PARTICIPANT_PLAYER))
+                .whenPublishingA(questionsLoaded(sevenQuestions()))
+                .expectDispatchedCommands(
+                        new RoomCommand.FailRoomCommand(ROOM_ID, "TOPIC_CHECK_FAILED"));
     }
 
     @Test
