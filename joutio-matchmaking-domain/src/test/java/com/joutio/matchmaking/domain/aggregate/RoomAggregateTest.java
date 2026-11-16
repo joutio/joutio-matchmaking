@@ -286,7 +286,7 @@ class RoomAggregateTest {
         fixture.given(
                         created(),
                         entered(INITIATOR_PLAYER),
-                        new RoomEvent.RoomLeftEvent(ROOM_ID, INITIATOR, Instant.now(), null, null))
+                        new RoomEvent.RoomLeftEvent(ROOM_ID, INITIATOR, Instant.now(), null, null, Set.of()))
                 .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
@@ -412,7 +412,7 @@ class RoomAggregateTest {
                         created(),
                         entered(INITIATOR_PLAYER, "s1"),
                         new RoomEvent.RoomLeftEvent(
-                                ROOM_ID, INITIATOR, Instant.now(), "s1", RoomLeaveReason.LEFT))
+                                ROOM_ID, INITIATOR, Instant.now(), "s1", RoomLeaveReason.LEFT, Set.of()))
                 .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, "s3"))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
@@ -685,13 +685,23 @@ class RoomAggregateTest {
                 Instant.now());
     }
 
+    @org.junit.jupiter.api.Test
+    void entering_carriesTheHumanPlayersOfTheRoom() {
+        fixture.given(created(), entered(INITIATOR_PLAYER))
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, PARTICIPANT, PARTICIPANT_PLAYER, "s2"))
+                .expectEventsMatching(
+                        JoutioAxonMatchers.hasPayloadMatching(
+                                RoomEvent.RoomEnteredEvent.class,
+                                e -> ((RoomEvent.RoomEnteredEvent) e).roomPlayerIds().equals(Set.of(INITIATOR, PARTICIPANT))));
+    }
+
     private static RoomEvent.RoomEnteredEvent entered(RoomPlayer player) {
-        return new RoomEvent.RoomEnteredEvent(ROOM_ID, player.playerId(), player, Instant.now(), null);
+        return new RoomEvent.RoomEnteredEvent(ROOM_ID, player.playerId(), player, Instant.now(), null, Set.of());
     }
 
     private static RoomEvent.RoomEnteredEvent entered(RoomPlayer player, String presenceId) {
         return new RoomEvent.RoomEnteredEvent(
-                ROOM_ID, player.playerId(), player, Instant.now(), presenceId);
+                ROOM_ID, player.playerId(), player, Instant.now(), presenceId, Set.of());
     }
 
     private static RoomCommand.LeaveRoomCommand leave(
@@ -701,7 +711,7 @@ class RoomAggregateTest {
 
     private static RoomEvent.RoomEnteredEvent enteredBot() {
         return new RoomEvent.RoomEnteredEvent(
-                ROOM_ID, JoutioConstants.SYSTEM_USER_ID, null, Instant.now(), null);
+                ROOM_ID, JoutioConstants.SYSTEM_USER_ID, null, Instant.now(), null, Set.of());
     }
 
     private static RoomEvent.RoomAllPlayersPresentEvent allPresent() {

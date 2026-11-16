@@ -126,9 +126,9 @@ requêtes renvoient des `CompletableFuture` dont le callback envoie une commande
   `CompleteRoomCommand`, `FailRoomCommand`, `ExpireRoomCommand`, `PurgeRoomCommand`.
 - `MatchmakingEvent.MatchmakingStartedEvent` porte `TopicLanguageCoverage`.
 - `RoomEvent` : `RoomCreatedEvent` (`vsBot`, `botDifficulty`), `RoomEnteredEvent` (+ snapshot
-  `RoomPlayer`, `null` pour le bot, + `presenceId`), `RoomAllPlayersPresentEvent`, `RoomPlayersLoadedEvent`,
+  `RoomPlayer`, `null` pour le bot, + `presenceId`, + `roomPlayerIds` : joueurs humains du salon, 2026-11-16), `RoomAllPlayersPresentEvent`, `RoomPlayersLoadedEvent`,
   `RoomPlayedQuestionsLoadedEvent` (+ ids joués), `RoomQuestionsLoadedEvent` (+ `DrawnQuestion`),
-  `RoomGameCreatedEvent`, `RoomLeftEvent` (+ `presenceId`, `reason`), `RoomWizzedEvent` (émetteur, cible, instant — pur temps
+  `RoomGameCreatedEvent`, `RoomLeftEvent` (+ `presenceId`, `reason`, `roomPlayerIds`), `RoomWizzedEvent` (émetteur, cible, instant — pur temps
   réel, aucun effet de préparation), `RoomCancelledEvent`,
   `RoomCompletedEvent`, `RoomFailedEvent`, `RoomExpiredEvent`, `RoomPurgedEvent`.
 - `MatchmakingQuery`, `ChallengeQuery`, `RoomQuery` (`GetRoomById`, `GetMyOpenRooms`,

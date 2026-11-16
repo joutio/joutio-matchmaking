@@ -96,7 +96,12 @@ public class RoomAggregate {
         if (command.vsBot()) {
             apply(
                     new RoomEvent.RoomEnteredEvent(
-                            command.roomId(), JoutioConstants.SYSTEM_USER_ID, null, now, null));
+                            command.roomId(),
+                            JoutioConstants.SYSTEM_USER_ID,
+                            null,
+                            now,
+                            null,
+                            humanPlayers(command.initiatorId(), command.opponentId(), null)));
         }
     }
 
@@ -126,7 +131,8 @@ public class RoomAggregate {
                                 command.playerId(),
                                 command.player(),
                                 Instant.now(),
-                                command.presenceId()));
+                                command.presenceId(),
+                                humanPlayers(initiatorId, opponentId, participantId)));
             }
             return;
         }
@@ -143,7 +149,12 @@ public class RoomAggregate {
         logger.info("Player entering room: roomId={}, playerId={}", roomId, command.playerId());
         apply(
                 new RoomEvent.RoomEnteredEvent(
-                        roomId, command.playerId(), command.player(), now, command.presenceId()));
+                        roomId,
+                        command.playerId(),
+                        command.player(),
+                        now,
+                        command.presenceId(),
+                        humanPlayers(initiatorId, opponentId, participantId, command.playerId())));
         if (bothPresent()) {
             // La préparation démarre immédiatement ; la partie sera créée dès les questions
             // tirées (plus de compte à rebours de lancement).
@@ -194,7 +205,8 @@ public class RoomAggregate {
                         command.playerId(),
                         Instant.now(),
                         command.presenceId(),
-                        command.reason()));
+                        command.reason(),
+                        humanPlayers(initiatorId, opponentId, participantId)));
     }
 
     /**
@@ -525,5 +537,16 @@ public class RoomAggregate {
     @EventSourcingHandler
     public void on(RoomEvent.RoomTopicAvailabilityConfirmedEvent event) {
         topicAvailabilityConfirmed = true;
+    }
+
+    /** Joueurs humains du salon (sans le bot), dans l'ordre, pour les événements de présence. */
+    private static java.util.Set<String> humanPlayers(String... ids) {
+        java.util.Set<String> players = new java.util.LinkedHashSet<>();
+        for (String id : ids) {
+            if (StringUtils.isNotBlank(id) && !JoutioConstants.SYSTEM_USER_ID.equals(id)) {
+                players.add(id);
+            }
+        }
+        return java.util.Set.copyOf(players);
     }
 }

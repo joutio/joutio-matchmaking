@@ -34,9 +34,16 @@ public interface RoomEvent {
      * null} pour le bot (présence système, aucun profil à résoudre). {@code presenceId} : session
      * temps réel qui porte la présence (nul pour le bot et les anciens clients) ; un joueur déjà
      * présent qui revient par une autre session ré-émet l'événement avec la nouvelle.
+     * {@code roomPlayerIds} : joueurs humains du salon après l'entrée (initiateur, invité, participant), pour
+     * notifier chacun sans relire la salle (2026-11-16).
      */
     record RoomEnteredEvent(
-            String roomId, String playerId, RoomPlayer player, Instant enteredAt, String presenceId)
+            String roomId,
+            String playerId,
+            RoomPlayer player,
+            Instant enteredAt,
+            String presenceId,
+            Set<String> roomPlayerIds)
             implements RoomEvent {}
 
     /**
@@ -75,10 +82,16 @@ public interface RoomEvent {
 
     /**
      * Le joueur n'est plus présent (il reste participant). {@code reason} est nul pour les
-     * événements antérieurs aux canaux de présence.
+     * événements antérieurs aux canaux de présence. {@code roomPlayerIds} : joueurs humains du salon
+     * (2026-11-16).
      */
     record RoomLeftEvent(
-            String roomId, String playerId, Instant leftAt, String presenceId, RoomLeaveReason reason)
+            String roomId,
+            String playerId,
+            Instant leftAt,
+            String presenceId,
+            RoomLeaveReason reason,
+            Set<String> roomPlayerIds)
             implements RoomEvent {}
 
     /**
