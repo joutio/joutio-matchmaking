@@ -1,3 +1,15 @@
+## [2.0.0](https://github.com/joutio/joutio-matchmaking/compare/v1.3.0...v2.0.0) (2026-11-16)
+
+### ⚠ BREAKING CHANGES
+
+* **rooms:** RoomEnteredEvent and RoomLeftEvent gain a roomPlayerIds component.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Features
+
+* **rooms:** presence events carry the room's human players ([5c753b5](https://github.com/joutio/joutio-matchmaking/commit/5c753b5145427177ffeac0b4ac3dec8ef24988dc))
+
 ## [1.3.0](https://github.com/joutio/joutio-matchmaking/compare/v1.2.0...v1.3.0) (2026-11-12)
 
 ### Features
