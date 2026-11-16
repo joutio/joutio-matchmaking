@@ -1,3 +1,9 @@
+## [2.0.1](https://github.com/joutio/joutio-matchmaking/compare/v2.0.0...v2.0.1) (2026-11-16)
+
+### Bug Fixes
+
+* **build:** pin joutio-theme-domain 3.8.1 ([2952b47](https://github.com/joutio/joutio-matchmaking/commit/2952b479351bc0dca153b128c798867bf382d90c))
+
 ## [2.0.0](https://github.com/joutio/joutio-matchmaking/compare/v1.3.0...v2.0.0) (2026-11-16)
 
 ### ⚠ BREAKING CHANGES
