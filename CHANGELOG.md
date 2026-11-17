@@ -1,3 +1,9 @@
+## [2.0.2](https://github.com/joutio/joutio-matchmaking/compare/v2.0.1...v2.0.2) (2026-11-17)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 1.1.0, unknown enum constants tolerated on the Axon transport ([3ec66c9](https://github.com/joutio/joutio-matchmaking/commit/3ec66c985229fc04c7523c46d06765c1253c5074))
+
 ## [2.0.1](https://github.com/joutio/joutio-matchmaking/compare/v2.0.0...v2.0.1) (2026-11-16)
 
 ### Bug Fixes

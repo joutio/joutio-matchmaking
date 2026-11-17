@@ -12,7 +12,7 @@
     </parent>
 
     <artifactId>joutio-matchmaking</artifactId>
-    <version>2.0.1-SNAPSHOT</version>
+    <version>2.0.2</version>
     <packaging>pom</packaging>
 
     <distributionManagement>
