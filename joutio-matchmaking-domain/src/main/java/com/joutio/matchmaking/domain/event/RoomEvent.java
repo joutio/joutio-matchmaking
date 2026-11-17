@@ -32,7 +32,7 @@ public interface RoomEvent {
     /**
      * Un joueur apparaît dans la salle (présence temps réel, idempotent). {@code player} est {@code
      * null} pour le bot (présence système, aucun profil à résoudre). {@code presenceId} : session
-     * temps réel qui porte la présence (nul pour le bot et les anciens clients) ; un joueur déjà
+     * temps réel qui porte la présence (nul pour le bot) ; un joueur déjà
      * présent qui revient par une autre session ré-émet l'événement avec la nouvelle.
      * {@code roomPlayerIds} : joueurs humains du salon après l'entrée (initiateur, invité, participant), pour
      * notifier chacun sans relire la salle (2026-11-16).

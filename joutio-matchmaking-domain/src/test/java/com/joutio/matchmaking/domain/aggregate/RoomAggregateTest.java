@@ -297,14 +297,14 @@ class RoomAggregateTest {
     }
 
     @Test
-    void leave_refusedOncePreparationStarted() {
+    void leave_ignoredOncePreparationStarted() {
         fixture.given(
                         created(),
                         entered(INITIATOR_PLAYER),
                         entered(PARTICIPANT_PLAYER),
                         allPresent())
-                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, PARTICIPANT, null, null))
-                .expectException(RoomExceptions.RoomPreparationStartedProblem.class);
+                .when(new RoomCommand.LeaveRoomCommand(ROOM_ID, PARTICIPANT, null, RoomLeaveReason.OFFLINE))
+                .expectNoEvents();
     }
 
     @Test

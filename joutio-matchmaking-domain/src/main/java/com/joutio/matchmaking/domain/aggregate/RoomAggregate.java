@@ -6,7 +6,6 @@ import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.exception.RoomExceptions;
 import com.joutio.matchmaking.domain.model.RoomDeadline;
-import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomStatus;
 import com.joutio.matchmaking.domain.model.RoomWizzRules;
 import com.joutio.microservice.core.domain.constant.JoutioConstants;
@@ -166,9 +165,9 @@ public class RoomAggregate {
      * Sortie <b>non destructive</b> avant l'engagement : le joueur n'est plus présent mais le
      * participant reste enregistré (retour possible). Constatée par le serveur, elle ne s'applique
      * qu'à la présence ouverte par la même session et reste sans effet une fois la préparation
-     * lancée (le duel est engagé). Une sortie sans session (ancien client, {@code POST /leave})
-     * garde l'ancien contrat : inconditionnelle, refusée pendant la préparation. La salle ne se
-     * ferme que par {@code CancelRoomCommand} (initiateur) ou expiration.
+     * lancée (le duel est engagé). Une sortie sans session vient du constat hors ligne
+     * ({@code OFFLINE}). La salle ne se ferme que par {@code CancelRoomCommand} (initiateur) ou
+     * expiration.
      */
     @CommandHandler
     public void handle(RoomCommand.LeaveRoomCommand command) {
@@ -176,13 +175,10 @@ public class RoomAggregate {
             return;
         }
         requireParticipant(command.playerId());
-        boolean observed = command.presenceId() != null;
         if (status != RoomStatus.WAITING_PLAYERS) {
-            if (observed || command.reason() == RoomLeaveReason.OFFLINE) {
-                return;
-            }
-            throw new RoomExceptions.RoomPreparationStartedProblem(roomId);
+            return;
         }
+        boolean observed = command.presenceId() != null;
         if (!isPresent(command.playerId())) {
             return;
         }

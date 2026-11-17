@@ -1,11 +1,6 @@
-# joutio-matchmaking (staging local)
+# joutio-matchmaking
 
-Structure cible en 2 sous-modules Maven :
+Salles, appariement public et défis nominatifs.
 
-- `joutio-matchmaking-domain`
-- `joutio-matchmaking-infrastructure`
-
-Seul `joutio-matchmaking-domain` est importable inter-services.
-
-Le code applicatif reste organise sous `com.joutio.matchmaking.application.*` dans le module infrastructure.
-
+Service du workspace Joutio : règles, état et commandes dans [`AGENTS.md`](AGENTS.md) ; documentation
+commune dans `docs/` du workspace.

@@ -75,15 +75,6 @@ public final class RoomExceptions {
         }
     }
 
-    /** Une fois la préparation engagée (les deux présents), la salle ne peut plus être quittée. */
-    public static class RoomPreparationStartedProblem extends RoomProblem {
-        public RoomPreparationStartedProblem(String roomId) {
-            super(roomId, "urn:joutio:room:preparationStarted",
-                    "Préparation engagée",
-                    "La salle ne peut plus être quittée une fois la préparation de la partie lancée");
-        }
-    }
-
     /** La relance exige un joueur réellement présent dans la salle (« connecté en attente »). */
     public static class RoomWizzRequesterNotPresentProblem extends RoomProblem {
         public RoomWizzRequesterNotPresentProblem(String roomId, String playerId) {
