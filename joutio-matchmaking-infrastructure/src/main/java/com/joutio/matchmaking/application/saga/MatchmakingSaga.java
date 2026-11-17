@@ -37,7 +37,7 @@ import java.util.UUID;
  * Le dernier arrivé initie le pairage : il cherche un candidat plus ancien, compatible (même
  * sujet, Elo ±{@code RATING_WINDOW}, langues couvertes par le sujet) puis crée la <b>salle</b>
  * (fire-and-forget, comme le défi nominatif) et marque les deux recherches comme appariées.
- * À l'échéance (**30 s**) sans adversaire, le ticket **s'arrête** ({@code EXPIRED}) — aucun repli
+ * À l'échéance (**10 s**) sans adversaire, le ticket **s'arrête** ({@code EXPIRED}) — aucun repli
  * bot automatique : le client propose de relancer une recherche ou de basculer explicitement sur
  * un entraînement. Le matchmaking ne prépare
  * jamais la partie : la salle est l'unique point d'échec, annoncé aux joueurs présents par
@@ -129,8 +129,8 @@ public class MatchmakingSaga {
                     || topicCoverage.approvedCountFor(union) < GameRules.TOTAL_ROUNDS) {
                 continue;
             }
-            if (pool.claim(candidate.matchmakingId(), playerId).isEmpty()) {
-                continue; // course : candidat déjà pris
+            if (!pool.claimPair(matchmakingId, candidate.matchmakingId())) {
+                continue; // course : candidat (ou soi-même) déjà pris
             }
             createHumanRoom(candidate);
             return;

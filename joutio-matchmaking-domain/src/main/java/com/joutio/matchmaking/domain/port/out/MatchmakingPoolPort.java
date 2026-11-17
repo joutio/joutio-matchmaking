@@ -3,7 +3,6 @@ package com.joutio.matchmaking.domain.port.out;
 import com.joutio.matchmaking.domain.model.MatchmakingCandidate;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Port sortant — pool de recherche d'appariement (index dérivé des recherches en cours).
@@ -20,6 +19,10 @@ public interface MatchmakingPoolPort {
      */
     List<MatchmakingCandidate> candidates(String topicId, int rating, int ratingWindow, String excludePlayerId, int limit);
 
-    /** Réclame atomiquement une recherche ; vide si elle a déjà été prise. */
-    Optional<MatchmakingCandidate> claim(String matchmakingId, String claimedByPlayerId);
+    /**
+     * Réclame atomiquement la paire (recherche de l'initiateur, recherche candidate) : réussit
+     * seulement si aucune des deux n'est déjà réclamée. Une recherche appariée ne peut donc plus
+     * être prise par un tiers, même si l'index n'a pas encore vu son appariement.
+     */
+    boolean claimPair(String matchmakingId, String candidateMatchmakingId);
 }

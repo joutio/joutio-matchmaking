@@ -43,16 +43,18 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
 
 - **`MatchmakingSaga`** : deadline de 10 s.
   - Le **dernier arrivé** cherche des candidats dans `MatchmakingPoolPort` : même sujet, Elo ±400
-    (`MatchmakingRules.RATING_WINDOW`), plus anciens d'abord.
-  - Il filtre localement sur la couverture des langues (union ≥ 7 questions), réserve le candidat
-    (`claim` atomique), crée une salle nominative (fire-and-forget) et marque les deux tickets.
+    (`MatchmakingRules.RATING_WINDOW`), Elo le plus proche puis plus anciens d'abord.
+  - Il filtre localement sur la couverture des langues (union ≥ 7 questions), réserve **la paire**
+    (`claimPair` : deux lignes de `matchmaking_claim` dans une transaction, `on conflict do
+    nothing`), crée une salle nominative (fire-and-forget) et marque les deux tickets. Une recherche
+    déjà réservée, comme initiatrice ou comme candidate, ne peut plus être prise par un tiers.
   - Sans adversaire → `EXPIRED`, sans salle : le client décide (relance ou entraînement).
 - **`ChallengeSaga`** :
   - expiration à `expiresAt` ;
   - à l'acceptation, création de la salle (une seule fois) ;
   - `RoomGameCreatedEvent` → `StartChallengeCommand` → `ChallengeStartedEvent`, qui sert au badge
     Défis de profile ;
-  - `ChallengePurgeSweeper` (60 s) sert de filet de purge.
+  - `ChallengePurgeSweeper` sert de filet de purge.
 - **`RoomSaga`** : seul créateur de partie.
   1. `RoomAllPlayersPresentEvent` : les profils sont déjà portés par les entrées.
   2. Historique des questions jouées : `PlayedQuestionsPort` → game, requête **non bloquante**.
@@ -67,9 +69,16 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
   saga ne se modifie jamais depuis un callback. Timeout de chaque étape : 10 s.
 - **Échecs** (`RoomFailureReason`) : `PLAYED_QUESTIONS_FAILED|TIMEOUT`,
   `QUESTION_DRAW_FAILED|TIMEOUT`, `TOPIC_CHECK_FAILED`, `TOPIC_NOT_AVAILABLE_IN_LANGUAGE`,
-  `GAME_CREATION_TIMEOUT`, `ROOM_PREPARATION_FAILED`. Ils passent tous par `RoomFailureRecorder`
-  (log WARN `Échec de salle` et `joutio_room_failures_total{reason}`). Le motif est poussé au client
-  (`ROOM_FAILED`).
+  `GAME_CREATION_TIMEOUT`, `ROOM_PREPARATION_FAILED`, `ROOM_PREPARATION_STALLED` (balayeur). Ils
+  passent tous par `RoomFailureRecorder` (log WARN `Échec de salle` et
+  `joutio_room_failures_total{reason}`). Le motif est poussé au client (`ROOM_FAILED`).
+- **Balayeurs** (tâches récurrentes db-scheduler, 1 min, une exécution dans le cluster ;
+  `SweepTaskConfiguration`) : ils rattrapent les deadlines en mémoire perdues avec leur pod.
+  - `RoomSweeper` : salle en préparation depuis plus de 1 min → `ROOM_PREPARATION_STALLED` ; salle
+    terminale non purgée → purge.
+  - `MatchmakingSweeper` : recherche `SEARCHING` 30 s après son échéance → expirée ; ticket
+    terminal non purgé → purge.
+  - `ChallengePurgeSweeper` : défi terminal non purgé → purge.
 - `OfflinePlayerRoomHandler` : sur `PlayerWentOfflineEvent` (profile), fait sortir le joueur
   (`OFFLINE`) des salles en attente.
 
@@ -97,4 +106,8 @@ mvn -pl joutio-matchmaking-infrastructure test
 
 - Ports sortants à **types locaux** (`DrawnQuestion`, `Set<String>`), jamais un type d'un autre
   `*-domain`, et toujours en `CompletableFuture`.
-- Une seule réplique : la préparation est séquentielle sous charge (`stress-test/INFRA.md`).
+- Deux répliques : `room-saga`, `matchmaking-saga`, `room-projection` et `matchmaking-projection`
+  sont segmentés (`application.yml`, [axon](../../docs/backend/axon.md#segments-et-répliques)).
+  Aucun `@Scheduled` : un balayeur est une tâche récurrente db-scheduler.
+- Le pool est lu dans `matchmaking-projection`, un autre processor que la saga : deux recherches
+  très rapprochées peuvent encore se manquer si la projection est en retard.

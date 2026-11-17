@@ -38,6 +38,10 @@ public class AccountDeletionHandler {
                 SELECT challenge_id FROM challenge_entry
                 WHERE challenger_id = ? OR opponent_id = ?
                 """, String.class, userId, userId);
+        jdbcTemplate.update("""
+                DELETE FROM matchmaking_claim
+                WHERE matchmaking_id IN (SELECT matchmaking_id FROM matchmaking_entry WHERE player_id = ?)
+                """, userId);
         jdbcTemplate.update("DELETE FROM matchmaking_entry WHERE player_id = ?", userId);
         jdbcTemplate.update("""
                 UPDATE room_entry

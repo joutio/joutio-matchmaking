@@ -49,9 +49,6 @@ public class MatchmakingEntity {
     @Column(name = "status", nullable = false, length = 20)
     private MatchmakingStatus status;
 
-    @Column(name = "claimed_by")
-    private String claimedBy;
-
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 

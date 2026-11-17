@@ -17,7 +17,6 @@ import org.mockito.Mockito;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.Mockito.when;
@@ -56,7 +55,7 @@ class MatchmakingSagaTest {
         MatchmakingCandidate candidate = new MatchmakingCandidate(
                 "mm-old", OPPONENT, Set.of(Language.EN), Instant.now().minusSeconds(30));
         when(pool.candidates(TOPIC, 200, 400, PLAYER, 10)).thenReturn(List.of(candidate));
-        when(pool.claim("mm-old", PLAYER)).thenReturn(Optional.of(candidate));
+        when(pool.claimPair(MM_ID, "mm-old")).thenReturn(true);
 
         fixture.givenNoPriorActivity()
                 .whenPublishingA(started(FULL_COVERAGE))

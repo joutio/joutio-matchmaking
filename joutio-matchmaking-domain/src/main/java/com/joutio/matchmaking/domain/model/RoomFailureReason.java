@@ -33,6 +33,9 @@ public final class RoomFailureReason {
     /** Accusé de création de partie (joutio-game) absent. */
     public static final String GAME_CREATION_TIMEOUT = "GAME_CREATION_TIMEOUT";
 
+    /** Préparation sans progrès au-delà du filet du balayeur (pas suivant perdu avec son pod). */
+    public static final String ROOM_PREPARATION_STALLED = "ROOM_PREPARATION_STALLED";
+
     /** Erreur inattendue dans un handler de la saga salle. */
     public static final String ROOM_PREPARATION_FAILED = "ROOM_PREPARATION_FAILED";
 

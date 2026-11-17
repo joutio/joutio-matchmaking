@@ -13,7 +13,7 @@ import java.util.function.UnaryOperator;
 
 /**
  * Read model « ticket » d'appariement (vue produit) ; sert aussi d'index au pool
- * ({@code status = SEARCHING}, {@code claimed_by} null).
+ * ({@code status = SEARCHING}, sans ligne dans {@code matchmaking_claim}).
  */
 @Component
 @ProcessingGroup("matchmaking-projection")

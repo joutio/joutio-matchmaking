@@ -21,4 +21,13 @@ public interface MatchmakingDeadline {
     String MATCHMAKING_PURGE = "matchmaking-purge";
 
     Duration MATCHMAKING_RETENTION_DURATION = Duration.ofMinutes(2);
+
+    /**
+     * Marge du balayeur d'appariement ({@code MatchmakingSweeper}) après l'échéance d'une recherche
+     * encore {@code SEARCHING} : la deadline en mémoire a été perdue avec son pod.
+     */
+    Duration MATCHMAKING_EXPIRY_GRACE = Duration.ofSeconds(30);
+
+    /** Marge avant que le balayeur ne purge un ticket terminal dont la purge a été perdue. */
+    Duration MATCHMAKING_SWEEP_GRACE = Duration.ofMinutes(10);
 }

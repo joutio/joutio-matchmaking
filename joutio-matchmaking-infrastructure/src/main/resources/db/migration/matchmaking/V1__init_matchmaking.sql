@@ -55,10 +55,19 @@ CREATE TABLE public.matchmaking_entry (
     room_id character varying(255),
     vs_bot boolean DEFAULT false NOT NULL,
     status character varying(20) NOT NULL,
-    claimed_by character varying(255),
     created_at timestamp without time zone NOT NULL,
     deadline_at timestamp without time zone NOT NULL,
     updated_at timestamp without time zone NOT NULL
+);
+
+
+--
+-- Name: matchmaking_claim; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.matchmaking_claim (
+    matchmaking_id character varying(255) NOT NULL,
+    claimed_at timestamp without time zone NOT NULL
 );
 
 
@@ -97,6 +106,14 @@ ALTER TABLE ONLY public.challenge_entry
 
 ALTER TABLE ONLY public.matchmaking_entry
     ADD CONSTRAINT matchmaking_entry_pkey PRIMARY KEY (matchmaking_id);
+
+
+--
+-- Name: matchmaking_claim matchmaking_claim_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.matchmaking_claim
+    ADD CONSTRAINT matchmaking_claim_pkey PRIMARY KEY (matchmaking_id);
 
 
 --

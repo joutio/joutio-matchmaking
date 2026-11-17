@@ -33,4 +33,14 @@ public interface RoomDeadline {
     String ROOM_PURGE = "room-purge";
 
     Duration ROOM_RETENTION_DURATION = Duration.ofMinutes(2);
+
+    /**
+     * Filet du balayeur de salles ({@code RoomSweeper}) : une salle restée plus longtemps en
+     * préparation a perdu son pas suivant (deadline en mémoire perdue avec son pod). Supérieur à
+     * {@link #ROOM_GAME_CREATION_DURATION} et aux délais d'étape.
+     */
+    Duration ROOM_PREPARATION_STALL = Duration.ofMinutes(1);
+
+    /** Marge avant que le balayeur ne purge une salle terminale dont la purge a été perdue. */
+    Duration ROOM_SWEEP_GRACE = Duration.ofMinutes(10);
 }

@@ -3,7 +3,6 @@ package com.joutio.matchmaking.infrastructure.out.persistence.repository;
 import com.joutio.matchmaking.infrastructure.out.persistence.entity.MatchmakingEntity;
 import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -18,7 +17,7 @@ public interface MatchmakingJpaRepository extends JpaRepository<MatchmakingEntit
             select e from MatchmakingEntity e
             where e.topicId = :topicId
               and e.status = com.joutio.matchmaking.domain.model.MatchmakingStatus.SEARCHING
-              and e.claimedBy is null
+              and not exists (select c from MatchmakingClaimEntity c where c.matchmakingId = e.matchmakingId)
               and e.playerId <> :excludePlayerId
               and e.rating between :minRating and :maxRating
             order by abs(e.rating - :rating) asc, e.createdAt asc
@@ -30,21 +29,18 @@ public interface MatchmakingJpaRepository extends JpaRepository<MatchmakingEntit
                                            @Param("maxRating") int maxRating,
                                            Limit limit);
 
-    /**
-     * Claim atomique du pool : ne réussit que si la recherche est encore SEARCHING et non
-     * réclamée. Le statut n'est pas modifié : la projection le passera à CLOSED à réception de
-     * {@code MatchmakingMatchedEvent}.
-     */
-    @Modifying
     @Query("""
-            update MatchmakingEntity e
-            set e.claimedBy = :claimedBy,
-                e.updatedAt = :now
-            where e.matchmakingId = :matchmakingId
-              and e.status = com.joutio.matchmaking.domain.model.MatchmakingStatus.SEARCHING
-              and e.claimedBy is null
+            select e.matchmakingId from MatchmakingEntity e
+            where e.status = com.joutio.matchmaking.domain.model.MatchmakingStatus.SEARCHING
+              and e.deadlineAt < :before
             """)
-    int claim(@Param("matchmakingId") String matchmakingId,
-              @Param("claimedBy") String claimedBy,
-              @Param("now") Instant now);
+    List<String> findSearchingIdsWithDeadlineBefore(@Param("before") Instant before);
+
+    @Query("""
+            select e.matchmakingId from MatchmakingEntity e
+            where e.status <> com.joutio.matchmaking.domain.model.MatchmakingStatus.SEARCHING
+              and e.updatedAt < :before
+            """)
+    List<String> findTerminalIdsBefore(@Param("before") Instant before);
+
 }

@@ -6,7 +6,6 @@ import com.joutio.matchmaking.domain.port.out.ChallengeRepositoryPort;
 import org.axonframework.commandhandling.gateway.CommandGateway;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -19,6 +18,7 @@ import java.time.Instant;
  * Le balayeur cible les défis terminaux plus vieux que la rétention + une marge
  * ({@link ChallengeDeadline#CHALLENGE_SWEEP_GRACE}) afin de laisser la saga faire son travail,
  * puis envoie une commande de purge idempotente (un agrégat déjà supprimé est ignoré).
+ * Planifié par {@link SweepTaskConfiguration} (une exécution par passage dans le cluster).
  */
 @Component
 public class ChallengePurgeSweeper {
@@ -34,7 +34,6 @@ public class ChallengePurgeSweeper {
         this.commandGateway = commandGateway;
     }
 
-    @Scheduled(fixedDelayString = "${app.challenge.purge-sweep-interval-ms:60000}")
     public void sweep() {
         Instant cutoff = Instant.now()
                 .minus(ChallengeDeadline.CHALLENGE_RETENTION_DURATION)

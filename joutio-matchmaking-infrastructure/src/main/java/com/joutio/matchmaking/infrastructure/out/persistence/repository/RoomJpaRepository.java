@@ -2,12 +2,14 @@ package com.joutio.matchmaking.infrastructure.out.persistence.repository;
 
 import com.joutio.matchmaking.infrastructure.out.persistence.entity.RoomEntity;
 
+import com.joutio.matchmaking.domain.model.RoomStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 @Repository
@@ -23,4 +25,12 @@ public interface RoomJpaRepository extends JpaRepository<RoomEntity, String> {
             """)
     List<RoomEntity> findOpenByPlayerId(
             @Param("playerId") String playerId, @Param("now") Instant now);
+
+    @Query("""
+            select r.roomId from RoomEntity r
+            where r.status in :statuses
+              and r.updatedAt < :before
+            """)
+    List<String> findIdsByStatusUpdatedBefore(@Param("statuses") Collection<RoomStatus> statuses,
+                                              @Param("before") Instant before);
 }
