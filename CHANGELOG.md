@@ -1,3 +1,9 @@
+## [2.1.0](https://github.com/joutio/joutio-matchmaking/compare/v2.0.2...v2.1.0) (2026-11-17)
+
+### Features
+
+* multi-replica matchmaking with atomic pair claim and db-scheduler sweepers ([8f5a77d](https://github.com/joutio/joutio-matchmaking/commit/8f5a77da4bfdf1bc6e5fda7a388d70c510208d6a))
+
 ## [2.0.2](https://github.com/joutio/joutio-matchmaking/compare/v2.0.1...v2.0.2) (2026-11-17)
 
 ### Bug Fixes
