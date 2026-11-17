@@ -1,3 +1,9 @@
+## [2.1.1](https://github.com/joutio/joutio-matchmaking/compare/v2.1.0...v2.1.1) (2026-11-17)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 1.2.0, segmented processing groups and single-partition Axon topic ([177e8df](https://github.com/joutio/joutio-matchmaking/commit/177e8df281c4e68aff3539ced68ac0e1ae1e7781))
+
 ## [2.1.0](https://github.com/joutio/joutio-matchmaking/compare/v2.0.2...v2.1.0) (2026-11-17)
 
 ### Features
