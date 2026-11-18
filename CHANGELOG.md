@@ -1,3 +1,9 @@
+## [2.1.3](https://github.com/joutio/joutio-matchmaking/compare/v2.1.2...v2.1.3) (2026-11-18)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 2.1.0, consistent command routing across replicas ([02896f2](https://github.com/joutio/joutio-matchmaking/commit/02896f2ea3b467257ce747281af4d2af16ce13f5))
+
 ## [2.1.2](https://github.com/joutio/joutio-matchmaking/compare/v2.1.1...v2.1.2) (2026-11-18)
 
 ### Bug Fixes
