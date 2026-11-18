@@ -25,12 +25,14 @@ joutio:
   axon:
     # Groupes chauds segmentés : un thread par segment et par réplique, répartition entre
     # répliques par le rééquilibreur du SDK. Appliqué à la création du token (base vierge).
+    # Un segment par réplique : chaque segment, même au repos, coûte une transaction par
+    # `joutio.axon.event-availability-timeout`. N'en ajouter que si un lag est mesuré.
     processors:
       room-saga:
-        segments: 4
+        segments: 2
       matchmaking-saga:
-        segments: 4
+        segments: 2
       room-projection:
-        segments: 4
+        segments: 2
       matchmaking-projection:
-        segments: 4
+        segments: 2
