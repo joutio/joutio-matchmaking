@@ -1,3 +1,9 @@
+## [2.1.2](https://github.com/joutio/joutio-matchmaking/compare/v2.1.1...v2.1.2) (2026-11-18)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 2.0.0, one segment per replica on hot groups ([7fc08c3](https://github.com/joutio/joutio-matchmaking/commit/7fc08c320cb969904c44011a8e753e05557c8ba7))
+
 ## [2.1.1](https://github.com/joutio/joutio-matchmaking/compare/v2.1.0...v2.1.1) (2026-11-17)
 
 ### Bug Fixes
