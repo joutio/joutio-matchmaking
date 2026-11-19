@@ -1,3 +1,9 @@
+## [2.2.0](https://github.com/joutio/joutio-matchmaking/compare/v2.1.3...v2.2.0) (2026-11-19)
+
+### Features
+
+* **question:** carry the image description to the game ([58cbf31](https://github.com/joutio/joutio-matchmaking/commit/58cbf315e452b9eea0757dca375ff767c9154545))
+
 ## [2.1.3](https://github.com/joutio/joutio-matchmaking/compare/v2.1.2...v2.1.3) (2026-11-18)
 
 ### Bug Fixes
