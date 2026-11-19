@@ -78,7 +78,7 @@ public class GamePreparationService {
                 answers.put(mapped, text);
             }
         });
-        return new GameQuestionContent(content.text(), answers);
+        return new GameQuestionContent(content.text(), answers, content.imageAlt());
     }
 
     private static GameQuestionChoice toGameQuestionChoice(DrawnQuestionChoice choice) {

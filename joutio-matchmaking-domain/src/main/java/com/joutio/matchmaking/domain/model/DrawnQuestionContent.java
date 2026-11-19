@@ -7,6 +7,8 @@ import java.util.Map;
  */
 public record DrawnQuestionContent(
         String text,
-        Map<DrawnQuestionChoice, String> answers
+        Map<DrawnQuestionChoice, String> answers,
+        /** Description de l'image dans cette langue (lecteurs d'écran) ; {@code null} si absente. */
+        String imageAlt
 ) {
 }

@@ -82,7 +82,8 @@ public class QuestionDrawService implements QuestionDrawPort {
     }
 
     private static DrawnQuestionContent toDrawnQuestionContent(QuestionContent content) {
-        return new DrawnQuestionContent(content.text(), toDrawnQuestionChoices(content.answers()));
+        return new DrawnQuestionContent(
+                content.text(), toDrawnQuestionChoices(content.answers()), content.imageAlt());
     }
 
     private static DrawnQuestionChoice toDrawnQuestionChoice(QuestionChoice questionChoice) {
