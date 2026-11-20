@@ -1,3 +1,9 @@
+## [2.3.0](https://github.com/joutio/joutio-matchmaking/compare/v2.2.7...v2.3.0) (2026-11-20)
+
+### Features
+
+* **challenge:** remind a pending challenge every 10 minutes ([0e10f6c](https://github.com/joutio/joutio-matchmaking/commit/0e10f6c17791a535b8208d014b387ed5a2db1d02))
+
 ## [2.2.7](https://github.com/joutio/joutio-matchmaking/compare/v2.2.6...v2.2.7) (2026-11-20)
 
 ### Bug Fixes
