@@ -1,3 +1,9 @@
+## [2.4.0](https://github.com/joutio/joutio-matchmaking/compare/v2.3.0...v2.4.0) (2026-11-20)
+
+### Features
+
+* **room:** origin of a room ([726720c](https://github.com/joutio/joutio-matchmaking/commit/726720c71e829bf84d28cff649b1e3b50ba71ac3))
+
 ## [2.3.0](https://github.com/joutio/joutio-matchmaking/compare/v2.2.7...v2.3.0) (2026-11-20)
 
 ### Features
