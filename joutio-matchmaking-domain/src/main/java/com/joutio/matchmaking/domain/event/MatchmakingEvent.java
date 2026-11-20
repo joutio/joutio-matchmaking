@@ -18,6 +18,7 @@ public interface MatchmakingEvent {
             int rating,
             Set<Language> languages,
             TopicLanguageCoverage topicCoverage,
+            Set<String> excludedPlayerIds,
             Instant startedAt,
             Instant deadlineAt
     ) implements MatchmakingEvent {

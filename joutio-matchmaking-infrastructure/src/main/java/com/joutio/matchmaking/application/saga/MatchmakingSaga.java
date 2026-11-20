@@ -114,17 +114,23 @@ public class MatchmakingSaga {
                 MatchmakingDeadline.MATCHMAKING_DEADLINE_DURATION,
                 MatchmakingDeadline.MATCHMAKING_DEADLINE);
 
-        tryMatch(event.languages());
+        tryMatch(event.languages(), event.excludedPlayerIds() == null ? Set.of() : event.excludedPlayerIds());
     }
 
-    /** Tente d'apparier avec un candidat plus ancien et compatible (couverture linguistique locale). */
-    private void tryMatch(Set<Language> myLanguages) {
+    /**
+     * Tente d'apparier avec un candidat plus ancien et compatible (couverture linguistique locale), jamais avec un
+     * joueur en relation de blocage ({@code excluded}, dans les deux sens : le dernier arrivé suffit).
+     */
+    private void tryMatch(Set<Language> myLanguages, Set<String> excluded) {
         List<MatchmakingCandidate> candidates =
                 pool.candidates(topicId, rating, MatchmakingRules.RATING_WINDOW, playerId, CANDIDATE_LIMIT);
 
         for (MatchmakingCandidate candidate : candidates) {
             if (!candidate.createdAt().isBefore(startedAt)) {
                 continue; // seul le plus récent initie
+            }
+            if (excluded.contains(candidate.playerId())) {
+                continue; // blocage entre les deux joueurs
             }
             Set<Language> union = union(myLanguages, candidate.languages());
             if (topicCoverage == null

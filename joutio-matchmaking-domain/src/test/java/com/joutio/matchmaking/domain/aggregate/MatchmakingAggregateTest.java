@@ -32,7 +32,7 @@ class MatchmakingAggregateTest {
     void create_appliesStartedEvent() {
         fixture.givenNoPriorActivity()
                 .when(new MatchmakingCommand.CreateMatchmakingCommand(
-                        MM_ID, PLAYER, TOPIC, 10, Set.of(Language.FR), COVERAGE))
+                        MM_ID, PLAYER, TOPIC, 10, Set.of(Language.FR), COVERAGE, Set.of()))
                 .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
                         MatchmakingEvent.MatchmakingStartedEvent.class,
                         e -> ((MatchmakingEvent.MatchmakingStartedEvent) e).matchmakingId().equals(MM_ID)
@@ -100,7 +100,7 @@ class MatchmakingAggregateTest {
     private static MatchmakingEvent.MatchmakingStartedEvent started() {
         java.time.Instant now = java.time.Instant.now();
         return new MatchmakingEvent.MatchmakingStartedEvent(
-                MM_ID, PLAYER, TOPIC, 10, Set.of(Language.FR), COVERAGE, now,
+                MM_ID, PLAYER, TOPIC, 10, Set.of(Language.FR), COVERAGE, Set.of(), now,
                 now.plus(java.time.Duration.ofSeconds(10)));
     }
 

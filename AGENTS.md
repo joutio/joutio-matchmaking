@@ -52,6 +52,8 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
     (`claimPair` : deux lignes de `matchmaking_claim` dans une transaction, `on conflict do
     nothing`), crée une salle nominative (fire-and-forget) et marque les deux tickets. Une recherche
     déjà réservée, comme initiatrice ou comme candidate, ne peut plus être prise par un tiers.
+  - Jamais avec un joueur en relation de blocage : le BFF passe `excludedPlayerIds` (social, dans les deux sens)
+    dans `CreateMatchmakingCommand`.
   - Sans adversaire → `EXPIRED`, sans salle : le client décide (relance ou entraînement).
 - **`ChallengeSaga`** :
   - expiration à `expiresAt` ;
@@ -85,6 +87,8 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
   - `ChallengePurgeSweeper` : défi terminal non purgé → purge.
 - `OfflinePlayerRoomHandler` : sur `PlayerWentOfflineEvent` (profile), fait sortir le joueur
   (`OFFLINE`) des salles en attente.
+- `PlayerBlockChallengeHandler` : sur `PlayerBlockedEvent` (social), annule les défis en attente entre les deux
+  joueurs, au nom de leur lanceur.
 
 ## Contrats (`joutio-matchmaking-domain`)
 
@@ -97,7 +101,7 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
   - `RoomWizzedEvent` (notification) ;
   - `RoomCompletedEvent` (notification).
 - Contrats consommés : `joutio-game-domain`, `joutio-theme-domain`, `joutio-profile-domain`,
-  `joutio-identity-domain`.
+  `joutio-identity-domain`, `joutio-social-domain`.
 
 ## Commandes
 

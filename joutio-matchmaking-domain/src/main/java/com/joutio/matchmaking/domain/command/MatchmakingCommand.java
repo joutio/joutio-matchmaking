@@ -24,7 +24,9 @@ public interface MatchmakingCommand {
             String topicId,
             int rating,
             Set<Language> languages,
-            TopicLanguageCoverage topicCoverage
+            TopicLanguageCoverage topicCoverage,
+            /** Joueurs en relation de blocage avec le joueur (social, préparé par le BFF) : jamais appariés. */
+            Set<String> excludedPlayerIds
     ) implements MatchmakingCommand {
     }
 

@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Set;
 
 import static org.axonframework.modelling.command.AggregateLifecycle.apply;
 
@@ -55,6 +56,7 @@ public class MatchmakingAggregate {
                 command.rating(),
                 command.languages(),
                 command.topicCoverage(),
+                command.excludedPlayerIds() == null ? Set.of() : Set.copyOf(command.excludedPlayerIds()),
                 now,
                 now.plus(MatchmakingDeadline.MATCHMAKING_DEADLINE_DURATION)));
     }

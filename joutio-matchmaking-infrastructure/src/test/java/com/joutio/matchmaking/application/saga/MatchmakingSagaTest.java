@@ -63,6 +63,17 @@ class MatchmakingSagaTest {
     }
 
     @Test
+    void started_withBlockedCandidate_doesNotMatch() {
+        MatchmakingCandidate candidate = new MatchmakingCandidate(
+                "mm-old", OPPONENT, Set.of(Language.EN), Instant.now().minusSeconds(30));
+        when(pool.candidates(TOPIC, 200, 400, PLAYER, 10)).thenReturn(List.of(candidate));
+
+        fixture.givenNoPriorActivity()
+                .whenPublishingA(started(FULL_COVERAGE, Set.of(OPPONENT)))
+                .expectNoDispatchedCommands();
+    }
+
+    @Test
     void started_withUncoveredLanguageUnion_doesNotMatch() {
         MatchmakingCandidate candidate = new MatchmakingCandidate(
                 "mm-old", OPPONENT, Set.of(Language.EN), Instant.now().minusSeconds(30));
@@ -86,9 +97,13 @@ class MatchmakingSagaTest {
     }
 
     private static MatchmakingEvent.MatchmakingStartedEvent started(TopicLanguageCoverage coverage) {
+        return started(coverage, Set.of());
+    }
+
+    private static MatchmakingEvent.MatchmakingStartedEvent started(TopicLanguageCoverage coverage, Set<String> excluded) {
         Instant now = Instant.now();
         return new MatchmakingEvent.MatchmakingStartedEvent(
-                MM_ID, PLAYER, TOPIC, 200, Set.of(Language.FR), coverage, now,
+                MM_ID, PLAYER, TOPIC, 200, Set.of(Language.FR), coverage, excluded, now,
                 now.plus(MatchmakingDeadline.MATCHMAKING_DEADLINE_DURATION));
     }
 

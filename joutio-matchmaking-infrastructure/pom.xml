@@ -15,6 +15,8 @@
 
     <properties>
         <joutio.theme-domain.version>3.9.0</joutio.theme-domain.version>
+        <!-- Pin du contrat social (blocages). -->
+        <joutio.social-domain.version>1.2.0</joutio.social-domain.version>
     </properties>
 
     <dependencies>
@@ -37,6 +39,11 @@
             <groupId>com.joutio</groupId>
             <artifactId>joutio-theme-domain</artifactId>
             <version>${joutio.theme-domain.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.joutio</groupId>
+            <artifactId>joutio-social-domain</artifactId>
+            <version>${joutio.social-domain.version}</version>
         </dependency>
         <dependency>
             <groupId>com.joutio</groupId>
