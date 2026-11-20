@@ -1,3 +1,9 @@
+## [2.2.5](https://github.com/joutio/joutio-matchmaking/compare/v2.2.4...v2.2.5) (2026-11-20)
+
+### Bug Fixes
+
+* **docker:** rebuild on patched base images ([513ac1a](https://github.com/joutio/joutio-matchmaking/commit/513ac1a4c108b89a88f3457ccee8e7d66b0ffa3c))
+
 ## [2.2.4](https://github.com/joutio/joutio-matchmaking/compare/v2.2.3...v2.2.4) (2026-11-20)
 
 ### Bug Fixes
