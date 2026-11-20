@@ -3,7 +3,7 @@ package com.joutio.matchmaking.application.handler.event;
 import com.joutio.matchmaking.domain.command.ChallengeCommand;
 import com.joutio.matchmaking.domain.model.Challenge;
 import com.joutio.matchmaking.domain.port.out.ChallengeRepositoryPort;
-import com.joutio.social.domain.event.PlayerBlockEvent;
+import com.joutio.social.domain.event.UserBlockEvent;
 import org.axonframework.commandhandling.gateway.CommandGateway;
 import org.axonframework.config.ProcessingGroup;
 import org.axonframework.eventhandling.EventHandler;
@@ -16,21 +16,21 @@ import org.springframework.stereotype.Component;
  * nom de son lanceur (l'invitation disparaît de l'inbox de l'invité).
  */
 @Component
-@ProcessingGroup("player-block-challenges")
-public class PlayerBlockChallengeHandler {
+@ProcessingGroup("user-block-challenges")
+public class UserBlockChallengeHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(PlayerBlockChallengeHandler.class);
+    private static final Logger logger = LoggerFactory.getLogger(UserBlockChallengeHandler.class);
 
     private final ChallengeRepositoryPort challenges;
     private final CommandGateway commandGateway;
 
-    public PlayerBlockChallengeHandler(ChallengeRepositoryPort challenges, CommandGateway commandGateway) {
+    public UserBlockChallengeHandler(ChallengeRepositoryPort challenges, CommandGateway commandGateway) {
         this.challenges = challenges;
         this.commandGateway = commandGateway;
     }
 
     @EventHandler
-    public void on(PlayerBlockEvent.PlayerBlockedEvent event) {
+    public void on(UserBlockEvent.UserBlockedEvent event) {
         for (Challenge challenge : challenges.findPendingByPlayerId(event.blockerId())) {
             if (!event.blockedId().equals(challenge.challengerId()) && !event.blockedId().equals(challenge.opponentId())) {
                 continue;

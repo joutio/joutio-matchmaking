@@ -87,7 +87,7 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
   - `ChallengePurgeSweeper` : défi terminal non purgé → purge.
 - `OfflinePlayerRoomHandler` : sur `PlayerWentOfflineEvent` (profile), fait sortir le joueur
   (`OFFLINE`) des salles en attente.
-- `PlayerBlockChallengeHandler` : sur `PlayerBlockedEvent` (social), annule les défis en attente entre les deux
+- `UserBlockChallengeHandler` : sur `UserBlockedEvent` (social), annule les défis en attente entre les deux
   joueurs, au nom de leur lanceur.
 
 ## Contrats (`joutio-matchmaking-domain`)
