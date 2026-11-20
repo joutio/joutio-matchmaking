@@ -1,3 +1,9 @@
+## [2.2.3](https://github.com/joutio/joutio-matchmaking/compare/v2.2.2...v2.2.3) (2026-11-20)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 2.3.0, readiness waits for instance-scoped processors ([0479c77](https://github.com/joutio/joutio-matchmaking/commit/0479c77dc30cd4fd199462a61003a052feebc86b))
+
 ## [2.2.2](https://github.com/joutio/joutio-matchmaking/compare/v2.2.1...v2.2.2) (2026-11-20)
 
 ### Bug Fixes
