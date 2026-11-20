@@ -1,3 +1,9 @@
+## [2.2.6](https://github.com/joutio/joutio-matchmaking/compare/v2.2.5...v2.2.6) (2026-11-20)
+
+### Performance Improvements
+
+* **docker:** JDK 25 AOT cache at startup ([a42010a](https://github.com/joutio/joutio-matchmaking/commit/a42010adf952ce3a818eafe71fa461a2ef801d9e))
+
 ## [2.2.5](https://github.com/joutio/joutio-matchmaking/compare/v2.2.4...v2.2.5) (2026-11-20)
 
 ### Bug Fixes
