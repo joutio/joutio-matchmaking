@@ -28,6 +28,8 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
     relance précédente (`ChallengeReminderRules`) ; `remindableAt` dans le read model.
 - **`RoomAggregate`** : deux humains, ou un humain et le bot (présent dès la création d'une salle
   `vsBot`).
+  - Origine fixée à la création (`RoomOrigin` : `SHARED` par le BFF, `BOT`, `MATCHMAKING` par la saga d'appariement,
+    `CHALLENGE` ou `REMATCH` par `ChallengeSaga` selon le `gameId` du défi) ; `origin` dans le read model.
   - Statut d'avancement : `WAITING_PLAYERS → FETCHING_PLAYERS → FETCHING_PLAYED_QUESTIONS →
     FETCHING_QUESTIONS → CREATING_GAME → GAME_CREATED → COMPLETED`, ou
     `CANCELLED|EXPIRED|FAILED`.

@@ -34,6 +34,7 @@ public class RoomProjection {
                 .initiatorId(event.initiatorId())
                 .opponentId(event.opponentId())
                 .vsBot(event.vsBot())
+                .origin(event.origin())
                 .status(RoomStatus.WAITING_PLAYERS)
                 .createdAt(event.createdAt())
                 .expiresAt(event.expiresAt())

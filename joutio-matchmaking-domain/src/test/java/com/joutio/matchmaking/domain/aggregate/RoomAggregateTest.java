@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.domain.aggregate;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
 import com.joutio.axon.test.JoutioAxonMatchers;
 import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.RoomEvent;
@@ -52,7 +54,7 @@ class RoomAggregateTest {
         fixture.givenNoPriorActivity()
                 .when(
                         new RoomCommand.CreateRoomCommand(
-                                ROOM_ID, TOPIC, INITIATOR, null, false, null))
+                                ROOM_ID, TOPIC, INITIATOR, null, false, null, RoomOrigin.SHARED))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
                                 RoomEvent.RoomCreatedEvent.class,
@@ -71,7 +73,7 @@ class RoomAggregateTest {
         fixture.givenNoPriorActivity()
                 .when(
                         new RoomCommand.CreateRoomCommand(
-                                ROOM_ID, TOPIC, INITIATOR, OPPONENT, false, null))
+                                ROOM_ID, TOPIC, INITIATOR, OPPONENT, false, null, RoomOrigin.CHALLENGE))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
                                 RoomEvent.RoomCreatedEvent.class,
@@ -90,7 +92,8 @@ class RoomAggregateTest {
                                 INITIATOR,
                                 JoutioConstants.SYSTEM_USER_ID,
                                 true,
-                                "HARD"))
+                                "HARD",
+                                RoomOrigin.BOT))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomCreatedEvent.class,
@@ -657,6 +660,7 @@ class RoomAggregateTest {
                 null,
                 false,
                 null,
+                RoomOrigin.SHARED,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
     }
@@ -669,6 +673,7 @@ class RoomAggregateTest {
                 OPPONENT,
                 false,
                 null,
+                RoomOrigin.CHALLENGE,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
     }
@@ -681,6 +686,7 @@ class RoomAggregateTest {
                 JoutioConstants.SYSTEM_USER_ID,
                 true,
                 "NORMAL",
+                RoomOrigin.BOT,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
     }

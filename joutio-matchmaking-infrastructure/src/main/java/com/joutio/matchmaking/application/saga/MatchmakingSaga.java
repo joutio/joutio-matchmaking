@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.application.saga;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
 import com.joutio.game.domain.model.GameRules;
 import com.joutio.matchmaking.domain.command.MatchmakingCommand;
 import com.joutio.matchmaking.domain.command.RoomCommand;
@@ -141,7 +143,7 @@ public class MatchmakingSaga {
         String roomId = UUID.randomUUID().toString();
         // Fire-and-forget : la salle est l'unique point d'échec (RoomFailedEvent).
         commandGateway.send(new RoomCommand.CreateRoomCommand(
-                roomId, topicId, playerId, candidate.playerId(), false, null));
+                roomId, topicId, playerId, candidate.playerId(), false, null, RoomOrigin.MATCHMAKING));
         commandGateway.send(new MatchmakingCommand.MarkMatchmakingMatchedCommand(
                 matchmakingId, candidate.playerId(), roomId, false));
         commandGateway.send(new MatchmakingCommand.MarkMatchmakingMatchedCommand(

@@ -17,6 +17,7 @@ public final class RoomEntityMapper {
                 .participantId(entity.getParticipantId())
                 .gameId(entity.getGameId())
                 .vsBot(entity.isVsBot())
+                .origin(entity.getOrigin())
                 .status(entity.getStatus())
                 .initiatorPresent(entity.isInitiatorPresent())
                 .participantPresent(entity.isParticipantPresent())
@@ -35,6 +36,7 @@ public final class RoomEntityMapper {
         entity.setParticipantId(room.participantId());
         entity.setGameId(room.gameId());
         entity.setVsBot(room.vsBot());
+        entity.setOrigin(room.origin());
         entity.setStatus(room.status());
         entity.setInitiatorPresent(room.initiatorPresent());
         entity.setParticipantPresent(room.participantPresent());

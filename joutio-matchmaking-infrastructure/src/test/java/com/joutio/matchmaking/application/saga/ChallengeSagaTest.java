@@ -1,5 +1,9 @@
 package com.joutio.matchmaking.application.saga;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
+import com.joutio.matchmaking.domain.command.RoomCommand;
+
 import com.joutio.matchmaking.domain.command.ChallengeCommand;
 import com.joutio.matchmaking.domain.event.ChallengeEvent;
 import com.joutio.matchmaking.domain.event.RoomEvent;
@@ -50,6 +54,24 @@ class ChallengeSagaTest {
                 .whenTimeElapses(Duration.ofSeconds(10))
                 .expectDispatchedCommands(
                         new ChallengeCommand.ExpireChallengeCommand(CHALLENGE_ID));
+    }
+
+    @Test
+    void accepted_createsAChallengeRoom() {
+        fixture.givenAPublished(created())
+                .whenPublishingA(accepted())
+                .expectDispatchedCommands(new RoomCommand.CreateRoomCommand(
+                        ChallengeRoomId.of(CHALLENGE_ID), TOPIC, CHALLENGER, OPPONENT, false, null, RoomOrigin.CHALLENGE));
+    }
+
+    @Test
+    void acceptedRematch_createsARematchRoom() {
+        Instant now = fixture.currentTime();
+        fixture.givenAPublished(new ChallengeEvent.ChallengeCreatedEvent(
+                        CHALLENGE_ID, TOPIC, CHALLENGER, OPPONENT, GAME_ID, now.plusSeconds(10), now))
+                .whenPublishingA(accepted())
+                .expectDispatchedCommands(new RoomCommand.CreateRoomCommand(
+                        ChallengeRoomId.of(CHALLENGE_ID), TOPIC, CHALLENGER, OPPONENT, false, null, RoomOrigin.REMATCH));
     }
 
     @Test

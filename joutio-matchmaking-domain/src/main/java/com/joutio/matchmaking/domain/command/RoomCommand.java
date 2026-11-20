@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.domain.command;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
 import com.joutio.matchmaking.domain.model.DrawnQuestion;
 import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
@@ -30,7 +32,9 @@ public interface RoomCommand {
             String initiatorId,
             String opponentId,
             boolean vsBot,
-            String botDifficulty)
+            String botDifficulty,
+            /** Origine (salon privé, défi, revanche, appariement, bot) : sections de l'écran Défis. */
+            RoomOrigin origin)
             implements RoomCommand {}
 
     /**

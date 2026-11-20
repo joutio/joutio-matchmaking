@@ -90,6 +90,7 @@ public class RoomAggregate {
                         command.opponentId(),
                         command.vsBot(),
                         command.botDifficulty(),
+                        command.origin(),
                         now.plus(RoomDeadline.ROOM_EXPIRY_DURATION),
                         now));
         if (command.vsBot()) {

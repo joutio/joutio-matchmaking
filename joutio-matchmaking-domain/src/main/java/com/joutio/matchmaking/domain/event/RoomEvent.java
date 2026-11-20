@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.domain.event;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
 import com.joutio.matchmaking.domain.model.DrawnQuestion;
 import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
@@ -25,6 +27,7 @@ public interface RoomEvent {
             String opponentId,
             boolean vsBot,
             String botDifficulty,
+            RoomOrigin origin,
             Instant expiresAt,
             Instant createdAt)
             implements RoomEvent {}

@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.application.saga;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -218,6 +220,7 @@ class RoomSagaTest {
                 null,
                 false,
                 null,
+                RoomOrigin.SHARED,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
     }

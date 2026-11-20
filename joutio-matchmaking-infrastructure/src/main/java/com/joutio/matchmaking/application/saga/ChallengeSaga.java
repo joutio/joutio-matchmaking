@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.application.saga;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
 import com.joutio.matchmaking.domain.command.ChallengeCommand;
 import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.ChallengeEvent;
@@ -59,10 +61,16 @@ public class ChallengeSaga {
     @Setter
     private boolean roomRequested;
 
+    /** Défi lancé depuis un résultat ({@code gameId} d'origine) : sa salle est une revanche. */
+    @Getter
+    @Setter
+    private boolean rematch;
+
     @StartSaga
     @SagaEventHandler(associationProperty = "challengeId")
     public void on(ChallengeEvent.ChallengeCreatedEvent event) {
         this.challengeId = event.challengeId();
+        this.rematch = event.gameId() != null;
         // L'agrégat porte l'échéance absolue (1 h, ou 10 s pour une revanche) : la saga planifie
         // exactement cet instant, jamais une durée recalculée depuis son propre horloge — sinon
         // la notification et l'agrégat expireraient à des moments différents.
@@ -91,7 +99,8 @@ public class ChallengeSaga {
             // (la salle produit la partie — cf. `RoomEvent.RoomGameCreatedEvent`).
             SagaLifecycle.associateWith("roomId", roomId);
             commandGateway.send(new RoomCommand.CreateRoomCommand(
-                    roomId, event.topicId(), event.challengerId(), event.opponentId(), false, null));
+                    roomId, event.topicId(), event.challengerId(), event.opponentId(), false, null,
+                    rematch ? RoomOrigin.REMATCH : RoomOrigin.CHALLENGE));
         }
     }
 

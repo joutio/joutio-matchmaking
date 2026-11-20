@@ -1,5 +1,7 @@
 package com.joutio.matchmaking.infrastructure.out.persistence.entity;
 
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+
 import com.joutio.matchmaking.domain.model.RoomStatus;
 import jakarta.persistence.*;
 import lombok.Getter;
@@ -43,6 +45,10 @@ public class RoomEntity {
 
     @Column(name = "vs_bot", nullable = false)
     private boolean vsBot;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "origin", nullable = false, length = 20)
+    private RoomOrigin origin;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)

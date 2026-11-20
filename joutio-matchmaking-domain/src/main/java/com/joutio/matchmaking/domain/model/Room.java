@@ -17,6 +17,8 @@ public record Room(
         String participantId,
         String gameId,
         boolean vsBot,
+        /** Origine de la salle (salon privé, défi, revanche, appariement, bot). */
+        RoomOrigin origin,
         RoomStatus status,
         boolean initiatorPresent,
         boolean participantPresent,
