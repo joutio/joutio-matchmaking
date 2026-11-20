@@ -1,3 +1,9 @@
+## [2.2.1](https://github.com/joutio/joutio-matchmaking/compare/v2.2.0...v2.2.1) (2026-11-20)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 2.2.0, kafka consumer, segment and rebalancer metrics ([cfbd700](https://github.com/joutio/joutio-matchmaking/commit/cfbd700b53e666154b6acbf82ec13eddef83c107))
+
 ## [2.2.0](https://github.com/joutio/joutio-matchmaking/compare/v2.1.3...v2.2.0) (2026-11-19)
 
 ### Features
