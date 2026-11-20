@@ -180,6 +180,55 @@ class ChallengeAggregateTest {
                 .expectNoEvents();
     }
 
+    @Test
+    void remind_byChallengerAfterCooldown_appliesReminded() {
+        fixture.given(createdAt(Instant.now().minus(Duration.ofMinutes(11))))
+                .when(new ChallengeCommand.RemindChallengeCommand(CHALLENGE_ID, CHALLENGER))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        ChallengeEvent.ChallengeRemindedEvent.class,
+                        e -> {
+                            var reminded = (ChallengeEvent.ChallengeRemindedEvent) e;
+                            return OPPONENT.equals(reminded.opponentId())
+                                    && reminded.remindableAt().equals(reminded.remindedAt().plus(Duration.ofMinutes(10)));
+                        }));
+    }
+
+    @Test
+    void remind_withinTenMinutesOfSending_isRejected() {
+        fixture.given(created())
+                .when(new ChallengeCommand.RemindChallengeCommand(CHALLENGE_ID, CHALLENGER))
+                .expectException(ChallengeExceptions.ChallengeReminderCooldownProblem.class);
+    }
+
+    @Test
+    void remind_withinTenMinutesOfPreviousReminder_isRejected() {
+        Instant sent = Instant.now().minus(Duration.ofMinutes(15));
+        Instant reminded = Instant.now().minus(Duration.ofMinutes(2));
+        fixture.given(createdAt(sent), new ChallengeEvent.ChallengeRemindedEvent(CHALLENGE_ID, TOPIC, CHALLENGER,
+                        OPPONENT, null, sent.plusSeconds(3600), reminded, reminded.plus(Duration.ofMinutes(10))))
+                .when(new ChallengeCommand.RemindChallengeCommand(CHALLENGE_ID, CHALLENGER))
+                .expectException(ChallengeExceptions.ChallengeReminderCooldownProblem.class);
+    }
+
+    @Test
+    void remind_byOpponent_isRejected() {
+        fixture.given(createdAt(Instant.now().minus(Duration.ofMinutes(11))))
+                .when(new ChallengeCommand.RemindChallengeCommand(CHALLENGE_ID, OPPONENT))
+                .expectException(ChallengeExceptions.PlayerNotChallengerProblem.class);
+    }
+
+    @Test
+    void remind_resolvedChallenge_isRejected() {
+        fixture.given(createdAt(Instant.now().minus(Duration.ofMinutes(11))), accepted())
+                .when(new ChallengeCommand.RemindChallengeCommand(CHALLENGE_ID, CHALLENGER))
+                .expectException(ChallengeExceptions.ChallengeNotPendingProblem.class);
+    }
+
+    private static ChallengeEvent.ChallengeCreatedEvent createdAt(Instant createdAt) {
+        return new ChallengeEvent.ChallengeCreatedEvent(
+                CHALLENGE_ID, TOPIC, CHALLENGER, OPPONENT, null, createdAt.plusSeconds(3600), createdAt);
+    }
+
     private static ChallengeEvent.ChallengeCreatedEvent created() {
         return new ChallengeEvent.ChallengeCreatedEvent(
                 CHALLENGE_ID, TOPIC, CHALLENGER, OPPONENT, null,

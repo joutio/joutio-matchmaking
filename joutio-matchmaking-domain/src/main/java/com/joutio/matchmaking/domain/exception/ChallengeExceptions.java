@@ -74,4 +74,14 @@ public final class ChallengeExceptions {
         }
     }
 
+
+    /** Relance trop rapprochée : {@code remindableAt} indique la prochaine relance possible. */
+    public static class ChallengeReminderCooldownProblem extends ChallengeProblem {
+        public ChallengeReminderCooldownProblem(String challengeId, java.time.Instant remindableAt) {
+            super(challengeId, "urn:joutio:challenge:reminderCooldown",
+                    "Relance trop rapide",
+                    "Le défi " + challengeId + " pourra être relancé à " + remindableAt,
+                    Map.of("remindableAt", remindableAt.toString()));
+        }
+    }
 }

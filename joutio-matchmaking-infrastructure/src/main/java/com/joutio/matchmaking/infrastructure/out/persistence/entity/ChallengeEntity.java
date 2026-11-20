@@ -54,6 +54,9 @@ public class ChallengeEntity {
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
 
+    @Column(name = "remindable_at", nullable = false)
+    private Instant remindableAt;
+
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 }

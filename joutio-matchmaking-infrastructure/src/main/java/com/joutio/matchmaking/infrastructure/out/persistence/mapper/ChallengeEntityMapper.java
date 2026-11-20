@@ -19,6 +19,7 @@ public final class ChallengeEntityMapper {
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())
                 .expiresAt(entity.getExpiresAt())
+                .remindableAt(entity.getRemindableAt())
                 .resolvedAt(entity.getResolvedAt())
                 .build();
     }
@@ -34,6 +35,7 @@ public final class ChallengeEntityMapper {
         entity.setStatus(challenge.status());
         entity.setCreatedAt(challenge.createdAt());
         entity.setExpiresAt(challenge.expiresAt());
+        entity.setRemindableAt(challenge.remindableAt());
         entity.setResolvedAt(challenge.resolvedAt());
         return entity;
     }

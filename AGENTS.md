@@ -24,6 +24,8 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
     (`expiresAt`).
   - Invariants de la commande seulement (pas d'auto-défi), aucune vérification de faisabilité.
   - Salle dérivée de façon déterministe (`ChallengeRoomId.of`).
+  - **Relance** (`RemindChallengeCommand`) : lanceur seul, défi `PENDING`, 10 min depuis l'envoi puis depuis la
+    relance précédente (`ChallengeReminderRules`) ; `remindableAt` dans le read model.
 - **`RoomAggregate`** : deux humains, ou un humain et le bot (présent dès la création d'une salle
   `vsBot`).
   - Statut d'avancement : `WAITING_PLAYERS → FETCHING_PLAYERS → FETCHING_PLAYED_QUESTIONS →
@@ -87,7 +89,7 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
 - Requêtes : `MatchmakingQuery`, `ChallengeQuery`, `RoomQuery` (`GetRoomById`, `GetMyOpenRooms`,
   `GetRoomEventsQuery`).
 - Événements utiles hors du service :
-  - `ChallengeCreated/Accepted/Declined/Cancelled/Expired/PurgedEvent` (notification) ;
+  - `ChallengeCreated/Reminded/Accepted/Declined/Cancelled/Expired/PurgedEvent` (notification) ;
   - `ChallengeStartedEvent` (profile) ;
   - `RoomEnteredEvent` et `RoomLeftEvent`, avec `roomPlayerIds` (BFF : pastille de présence) ;
   - `RoomWizzedEvent` (notification) ;

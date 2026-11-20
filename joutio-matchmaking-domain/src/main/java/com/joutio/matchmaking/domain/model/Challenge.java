@@ -21,6 +21,8 @@ public record Challenge(
         ChallengeStatus status,
         Instant createdAt,
         Instant expiresAt,
+        /** Prochaine relance possible par le lanceur ({@code ChallengeReminderRules}). */
+        Instant remindableAt,
         Instant resolvedAt
 ) {
 }

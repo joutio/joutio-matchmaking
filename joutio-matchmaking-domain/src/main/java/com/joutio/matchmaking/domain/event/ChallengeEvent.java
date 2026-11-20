@@ -47,6 +47,22 @@ public interface ChallengeEvent {
     ) implements ChallengeEvent {
     }
 
+    /**
+     * Le lanceur relance son défi en attente : l'invitation est rappelée à l'adversaire (inbox remise en tête, push).
+     * Porte de quoi recréer l'invitation ; {@code remindableAt} est l'instant de la relance suivante possible.
+     */
+    record ChallengeRemindedEvent(
+            String challengeId,
+            String topicId,
+            String challengerId,
+            String opponentId,
+            String gameId,
+            Instant expiresAt,
+            Instant remindedAt,
+            Instant remindableAt
+    ) implements ChallengeEvent {
+    }
+
     record ChallengeDeclinedEvent(
             String challengeId,
             String challengerId,

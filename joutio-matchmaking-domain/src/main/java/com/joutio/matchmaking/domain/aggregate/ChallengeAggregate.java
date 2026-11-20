@@ -4,6 +4,7 @@ import com.joutio.matchmaking.domain.command.ChallengeCommand;
 import com.joutio.matchmaking.domain.event.ChallengeEvent;
 import com.joutio.matchmaking.domain.exception.ChallengeExceptions;
 import com.joutio.matchmaking.domain.model.ChallengeDeadline;
+import com.joutio.matchmaking.domain.model.ChallengeReminderRules;
 import com.joutio.matchmaking.domain.model.ChallengeStatus;
 import org.apache.commons.lang3.StringUtils;
 import org.axonframework.commandhandling.CommandHandler;
@@ -38,6 +39,11 @@ public class ChallengeAggregate {
     private String challengerId;
     private String opponentId;
     private ChallengeStatus status;
+    /** Partie terminée d'origine d'une revanche, sinon {@code null}. */
+    private String gameId;
+    private Instant expiresAt;
+    /** Prochaine relance possible ({@code ChallengeReminderRules}). */
+    private Instant remindableAt;
     /** Partie créée par la salle du défi (fait « le défi a abouti »), sinon {@code null}. */
     private String startedGameId;
 
@@ -92,6 +98,22 @@ public class ChallengeAggregate {
             throw new ChallengeExceptions.PlayerNotChallengerProblem(challengeId, command.playerId());
         }
         apply(new ChallengeEvent.ChallengeCancelledEvent(challengeId, challengerId, Instant.now()));
+    }
+
+    /** Le lanceur relance son défi en attente, au plus toutes les 10 min ({@code ChallengeReminderRules}). */
+    @CommandHandler
+    public void handle(ChallengeCommand.RemindChallengeCommand command) {
+        requirePending();
+        if (!command.playerId().equals(challengerId)) {
+            throw new ChallengeExceptions.PlayerNotChallengerProblem(challengeId, command.playerId());
+        }
+        Instant now = Instant.now();
+        if (now.isBefore(remindableAt)) {
+            throw new ChallengeExceptions.ChallengeReminderCooldownProblem(challengeId, remindableAt);
+        }
+        logger.info("Reminding challenge: challengeId={}, challengerId={}", challengeId, challengerId);
+        apply(new ChallengeEvent.ChallengeRemindedEvent(challengeId, topicId, challengerId, opponentId, gameId,
+                expiresAt, now, ChallengeReminderRules.remindableAt(now)));
     }
 
     @CommandHandler
@@ -173,7 +195,15 @@ public class ChallengeAggregate {
         this.topicId = event.topicId();
         this.challengerId = event.challengerId();
         this.opponentId = event.opponentId();
+        this.gameId = event.gameId();
+        this.expiresAt = event.expiresAt();
+        this.remindableAt = ChallengeReminderRules.remindableAt(event.createdAt());
         this.status = ChallengeStatus.PENDING;
+    }
+
+    @EventSourcingHandler
+    public void on(ChallengeEvent.ChallengeRemindedEvent event) {
+        this.remindableAt = event.remindableAt();
     }
 
     @EventSourcingHandler

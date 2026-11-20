@@ -3,6 +3,7 @@ package com.joutio.matchmaking.application.projection;
 import com.joutio.matchmaking.domain.event.ChallengeEvent;
 import com.joutio.matchmaking.domain.model.Challenge;
 import com.joutio.matchmaking.domain.model.ChallengeRoomId;
+import com.joutio.matchmaking.domain.model.ChallengeReminderRules;
 import com.joutio.matchmaking.domain.model.ChallengeStatus;
 import com.joutio.matchmaking.domain.port.out.ChallengeRepositoryPort;
 import org.axonframework.config.ProcessingGroup;
@@ -37,6 +38,15 @@ public class ChallengeProjection {
                 .status(ChallengeStatus.PENDING)
                 .createdAt(event.createdAt())
                 .expiresAt(event.expiresAt())
+                .remindableAt(ChallengeReminderRules.remindableAt(event.createdAt()))
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengeRemindedEvent event) {
+        update(event.challengeId(), challenge -> challenge.toBuilder()
+                .remindableAt(event.remindableAt())
                 .build());
     }
 

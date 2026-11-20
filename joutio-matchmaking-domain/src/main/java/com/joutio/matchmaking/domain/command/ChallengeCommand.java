@@ -42,6 +42,13 @@ public interface ChallengeCommand {
     ) implements ChallengeCommand {
     }
 
+    /** A relance son défi resté sans réponse ({@code ChallengeReminderRules} : 10 min entre deux relances). */
+    record RemindChallengeCommand(
+            @TargetAggregateIdentifier String challengeId,
+            String playerId
+    ) implements ChallengeCommand {
+    }
+
     /** Commande interne (saga, deadline) : défi jamais accepté, expiré. */
     record ExpireChallengeCommand(
             @TargetAggregateIdentifier String challengeId
