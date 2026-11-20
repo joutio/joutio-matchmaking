@@ -1,3 +1,9 @@
+## [2.2.4](https://github.com/joutio/joutio-matchmaking/compare/v2.2.3...v2.2.4) (2026-11-20)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 2.4.0, instance-scoped groups on one Kafka consumer per pod ([9da0568](https://github.com/joutio/joutio-matchmaking/commit/9da05687c673f93119bc956ca7464fdbf7b59735))
+
 ## [2.2.3](https://github.com/joutio/joutio-matchmaking/compare/v2.2.2...v2.2.3) (2026-11-20)
 
 ### Bug Fixes
