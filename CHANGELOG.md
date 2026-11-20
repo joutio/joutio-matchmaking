@@ -1,3 +1,9 @@
+## [2.2.7](https://github.com/joutio/joutio-matchmaking/compare/v2.2.6...v2.2.7) (2026-11-20)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 2.4.1 with patched dependencies ([c6ac035](https://github.com/joutio/joutio-matchmaking/commit/c6ac035183863d52419768db2e31ca945e0af0ec))
+
 ## [2.2.6](https://github.com/joutio/joutio-matchmaking/compare/v2.2.5...v2.2.6) (2026-11-20)
 
 ### Performance Improvements
