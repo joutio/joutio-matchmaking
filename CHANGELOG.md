@@ -1,3 +1,9 @@
+## [2.5.0](https://github.com/joutio/joutio-matchmaking/compare/v2.4.0...v2.5.0) (2026-11-20)
+
+### Features
+
+* **block:** blocked players are never matched, their challenges end ([dbcfd01](https://github.com/joutio/joutio-matchmaking/commit/dbcfd015dee546dd64643d5e25d915b8ffbad217))
+
 ## [2.4.0](https://github.com/joutio/joutio-matchmaking/compare/v2.3.0...v2.4.0) (2026-11-20)
 
 ### Features
