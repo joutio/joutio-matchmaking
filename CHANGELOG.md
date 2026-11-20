@@ -1,3 +1,9 @@
+## [2.2.2](https://github.com/joutio/joutio-matchmaking/compare/v2.2.1...v2.2.2) (2026-11-20)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 2.2.1, distinct Kafka consumer metrics ([448e769](https://github.com/joutio/joutio-matchmaking/commit/448e769f2409fc0e1b810a73c009e76ec09830de))
+
 ## [2.2.1](https://github.com/joutio/joutio-matchmaking/compare/v2.2.0...v2.2.1) (2026-11-20)
 
 ### Bug Fixes
