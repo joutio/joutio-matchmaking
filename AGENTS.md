@@ -50,14 +50,18 @@ Les trois agrégats sont **éphémères** : un état terminal est gardé 2 min (
     (`MatchmakingRules.RATING_WINDOW`), Elo le plus proche puis plus anciens d'abord.
   - Il filtre localement sur la couverture des langues (union ≥ 7 questions), réserve **la paire**
     (`claimPair` : deux lignes de `matchmaking_claim` dans une transaction, `on conflict do
-    nothing`), crée une salle nominative (fire-and-forget) et marque les deux tickets. Une recherche
-    déjà réservée, comme initiatrice ou comme candidate, ne peut plus être prise par un tiers.
+    nothing`) et crée une salle nominative (fire-and-forget). Il n'en marque les deux tickets
+    `MATCHED` qu'à l'accusé `RoomCreatedEvent` (deadline 30 s, échec → `FAILED`), pour que le client
+    n'apprenne jamais un `roomId` avant que la salle existe. Une recherche déjà réservée, comme
+    initiatrice ou comme candidate, ne peut plus être prise par un tiers.
   - Jamais avec un joueur en relation de blocage : le BFF passe `excludedPlayerIds` (social, dans les deux sens)
     dans `CreateMatchmakingCommand`.
   - Sans adversaire → `EXPIRED`, sans salle : le client décide (relance ou entraînement).
 - **`ChallengeSaga`** :
   - expiration à `expiresAt` ;
   - à l'acceptation, création de la salle (une seule fois) ;
+  - `RoomCreatedEvent` → `MarkChallengeRoomCreatedCommand` → `ChallengeRoomCreatedEvent` : le
+    `roomId` du défi (projection) n'apparaît qu'à ce moment, jamais à l'acceptation ;
   - `RoomGameCreatedEvent` → `StartChallengeCommand` → `ChallengeStartedEvent`, qui sert au badge
     Défis de profile ;
   - `ChallengePurgeSweeper` sert de filet de purge.

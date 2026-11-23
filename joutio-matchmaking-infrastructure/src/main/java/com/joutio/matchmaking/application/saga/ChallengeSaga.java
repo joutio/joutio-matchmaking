@@ -105,6 +105,16 @@ public class ChallengeSaga {
     }
 
     /**
+     * La salle du défi est créée : le défi expose alors son {@code roomId} (le client n'apprend plus
+     * un {@code roomId} avant que la salle existe — cf. {@code ChallengeRoomCreatedEvent}).
+     */
+    @SagaEventHandler(associationProperty = "roomId")
+    public void on(RoomEvent.RoomCreatedEvent event) {
+        logger.info("Salle du défi créée: challengeId={}, roomId={}", challengeId, event.roomId());
+        commandGateway.send(new ChallengeCommand.MarkChallengeRoomCreatedCommand(challengeId, event.roomId()));
+    }
+
+    /**
      * La salle du défi a produit une partie : le défi « a abouti » (l'invité s'est présenté).
      * La saga reste vivante (rétention puis purge).
      */

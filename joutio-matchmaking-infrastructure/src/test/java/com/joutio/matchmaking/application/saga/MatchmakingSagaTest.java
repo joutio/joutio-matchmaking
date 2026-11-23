@@ -51,7 +51,7 @@ class MatchmakingSagaTest {
     }
 
     @Test
-    void started_withCoveredCandidate_createsRoomAndMarksBothTickets() {
+    void started_withCoveredCandidate_createsRoomAndWaitsForRoomAck() {
         MatchmakingCandidate candidate = new MatchmakingCandidate(
                 "mm-old", OPPONENT, Set.of(Language.EN), Instant.now().minusSeconds(30));
         when(pool.candidates(TOPIC, 200, 400, PLAYER, 10)).thenReturn(List.of(candidate));
@@ -59,7 +59,22 @@ class MatchmakingSagaTest {
 
         fixture.givenNoPriorActivity()
                 .whenPublishingA(started(FULL_COVERAGE))
-                .expectDispatchedCommandsMatching(humanMatchMatching());
+                .expectDispatchedCommandsMatching(createRoomOnly());
+    }
+
+    @Test
+    void roomCreationTimeout_failsBothTickets() {
+        MatchmakingCandidate candidate = new MatchmakingCandidate(
+                "mm-old", OPPONENT, Set.of(Language.EN), Instant.now().minusSeconds(30));
+        when(pool.candidates(TOPIC, 200, 400, PLAYER, 10)).thenReturn(List.of(candidate));
+        when(pool.claimPair(MM_ID, "mm-old")).thenReturn(true);
+
+        fixture.givenNoPriorActivity()
+                .whenPublishingA(started(FULL_COVERAGE))
+                .expectDispatchedCommandsMatching(createRoomOnly());
+
+        fixture.whenTimeElapses(MatchmakingDeadline.MATCHMAKING_ROOM_CREATION_DURATION)
+                .expectDispatchedCommandsMatching(failBothMatching());
     }
 
     @Test
@@ -107,16 +122,19 @@ class MatchmakingSagaTest {
                 now.plus(MatchmakingDeadline.MATCHMAKING_DEADLINE_DURATION));
     }
 
-    private static Matcher<? extends List<? super CommandMessage<?>>> humanMatchMatching() {
-        return Matchers.matches(commands -> commands.size() == 3
+    private static Matcher<? extends List<? super CommandMessage<?>>> createRoomOnly() {
+        return Matchers.matches(commands -> commands.size() == 1
                 && commands.stream().anyMatch(command -> command instanceof CommandMessage<?> message
                         && message.getPayload() instanceof RoomCommand.CreateRoomCommand createRoom
                         && TOPIC.equals(createRoom.topicId())
                         && PLAYER.equals(createRoom.initiatorId())
-                        && OPPONENT.equals(createRoom.opponentId()))
-                && commands.stream().filter(command -> command instanceof CommandMessage<?> message
-                        && message.getPayload() instanceof MatchmakingCommand.MarkMatchmakingMatchedCommand)
-                .count() == 2);
+                        && OPPONENT.equals(createRoom.opponentId())));
+    }
+
+    private static Matcher<? extends List<? super CommandMessage<?>>> failBothMatching() {
+        return Matchers.matches(commands -> commands.size() == 2
+                && commands.stream().allMatch(command -> command instanceof CommandMessage<?> message
+                        && message.getPayload() instanceof MatchmakingCommand.FailMatchmakingCommand));
     }
 
     private static Matcher<? extends List<? super CommandMessage<?>>> expireMatching() {

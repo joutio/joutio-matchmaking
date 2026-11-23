@@ -1,6 +1,6 @@
 package com.joutio.matchmaking.domain.port.out;
 
-import com.joutio.microservice.core.domain.model.notification.EventEnvelope;
+import com.joutio.microservice.core.domain.model.event.EventEnvelope;
 
 import java.util.List;
 

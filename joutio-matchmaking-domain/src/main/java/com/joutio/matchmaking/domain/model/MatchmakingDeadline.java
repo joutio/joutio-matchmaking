@@ -17,6 +17,15 @@ public interface MatchmakingDeadline {
 
     Duration MATCHMAKING_DEADLINE_DURATION = Duration.ofSeconds(10);
 
+    /**
+     * Accusé de création de la salle d'appariement ({@code RoomCreatedEvent}) attendu par la saga :
+     * la commande est fire-and-forget, donc un accusé manquant fait échouer les deux tickets au lieu
+     * de les laisser en recherche.
+     */
+    String MATCHMAKING_ROOM_CREATION = "matchmaking-room-creation";
+
+    Duration MATCHMAKING_ROOM_CREATION_DURATION = Duration.ofSeconds(30);
+
     /** Rétention d'un ticket d'appariement terminal avant purge (read model). */
     String MATCHMAKING_PURGE = "matchmaking-purge";
 

@@ -5,7 +5,7 @@ import com.joutio.matchmaking.domain.model.Matchmaking;
 import com.joutio.matchmaking.domain.port.out.MatchmakingEventStorePort;
 import com.joutio.matchmaking.domain.port.out.MatchmakingRepositoryPort;
 import com.joutio.matchmaking.domain.query.MatchmakingQuery;
-import com.joutio.microservice.core.domain.model.notification.EventEnvelope;
+import com.joutio.microservice.core.domain.model.event.EventEnvelope;
 import org.axonframework.queryhandling.QueryHandler;
 import org.springframework.stereotype.Component;
 

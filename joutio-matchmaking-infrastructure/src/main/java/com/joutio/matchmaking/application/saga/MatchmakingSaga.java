@@ -6,6 +6,7 @@ import com.joutio.game.domain.model.GameRules;
 import com.joutio.matchmaking.domain.command.MatchmakingCommand;
 import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.MatchmakingEvent;
+import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.model.MatchmakingCandidate;
 import com.joutio.matchmaking.domain.model.MatchmakingDeadline;
 import com.joutio.matchmaking.domain.model.MatchmakingRules;
@@ -21,6 +22,7 @@ import org.axonframework.deadline.annotation.DeadlineHandler;
 import org.axonframework.messaging.interceptors.ExceptionHandler;
 import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
+import org.axonframework.modelling.saga.SagaLifecycle;
 import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.spring.stereotype.Saga;
 import org.slf4j.Logger;
@@ -100,6 +102,18 @@ public class MatchmakingSaga {
     @Setter
     private boolean finished;
 
+    @Getter
+    @Setter
+    private String otherMatchmakingId;
+
+    @Getter
+    @Setter
+    private String otherPlayerId;
+
+    @Getter
+    @Setter
+    private String roomCreationDeadlineId;
+
     @StartSaga
     @SagaEventHandler(associationProperty = "matchmakingId")
     public void on(MatchmakingEvent.MatchmakingStartedEvent event) {
@@ -147,13 +161,22 @@ public class MatchmakingSaga {
 
     private void createHumanRoom(MatchmakingCandidate candidate) {
         String roomId = UUID.randomUUID().toString();
-        // Fire-and-forget : la salle est l'unique point d'échec (RoomFailedEvent).
+        this.otherMatchmakingId = candidate.matchmakingId();
+        this.otherPlayerId = candidate.playerId();
+        // Fire-and-forget : la salle est l'unique point d'échec (RoomFailedEvent). La saga attend
+        // l'accusé RoomCreatedEvent avant de marquer les deux tickets MATCHED, pour que le client
+        // n'apprenne jamais un roomId avant que la salle existe.
+        SagaLifecycle.associateWith("roomId", roomId);
+        this.roomCreationDeadlineId = deadlineManager.schedule(
+                MatchmakingDeadline.MATCHMAKING_ROOM_CREATION_DURATION,
+                MatchmakingDeadline.MATCHMAKING_ROOM_CREATION);
+        logger.info(
+                "Création de salle demandée: matchmakingId={}, otherMatchmakingId={}, roomId={}",
+                matchmakingId, otherMatchmakingId, roomId);
         commandGateway.send(new RoomCommand.CreateRoomCommand(
                 roomId, topicId, playerId, candidate.playerId(), false, null, RoomOrigin.MATCHMAKING));
-        commandGateway.send(new MatchmakingCommand.MarkMatchmakingMatchedCommand(
-                matchmakingId, candidate.playerId(), roomId, false));
-        commandGateway.send(new MatchmakingCommand.MarkMatchmakingMatchedCommand(
-                candidate.matchmakingId(), playerId, roomId, false));
+        // La recherche est terminée (paire constituée) : le délai de recherche n'expire plus.
+        cancelDeadline();
         this.finished = true;
     }
 
@@ -165,6 +188,45 @@ public class MatchmakingSaga {
         logger.info("Fenêtre de recherche écoulée sans adversaire: matchmakingId={}", matchmakingId);
         commandGateway.send(new MatchmakingCommand.ExpireMatchmakingCommand(matchmakingId));
         this.finished = true;
+    }
+
+    /**
+     * Accusé de création de la salle d'appariement : les deux tickets ne sont marqués appariés
+     * qu'ici, pour que le client n'apprenne jamais un {@code roomId} avant que la salle existe.
+     */
+    @SagaEventHandler(associationProperty = "roomId")
+    public void on(RoomEvent.RoomCreatedEvent event) {
+        cancelRoomCreationDeadline();
+        logger.info(
+                "Salle d'appariement créée: matchmakingId={}, otherMatchmakingId={}, roomId={}",
+                matchmakingId, otherMatchmakingId, event.roomId());
+        commandGateway.send(new MatchmakingCommand.MarkMatchmakingMatchedCommand(
+                matchmakingId, otherPlayerId, event.roomId(), false));
+        commandGateway.send(new MatchmakingCommand.MarkMatchmakingMatchedCommand(
+                otherMatchmakingId, playerId, event.roomId(), false));
+    }
+
+    /** La salle d'appariement a échoué : les deux tickets échouent au lieu de rester en recherche. */
+    @SagaEventHandler(associationProperty = "roomId")
+    public void on(RoomEvent.RoomFailedEvent event) {
+        failBoth(event.reason());
+    }
+
+    /** Accusé de création absent : les deux tickets échouent au lieu de rester en recherche. */
+    @DeadlineHandler(deadlineName = MatchmakingDeadline.MATCHMAKING_ROOM_CREATION)
+    public void onRoomCreationTimeout() {
+        failBoth("ROOM_CREATION_TIMEOUT");
+    }
+
+    private void failBoth(String reason) {
+        cancelRoomCreationDeadline();
+        logger.info(
+                "Échec de la salle d'appariement: matchmakingId={}, otherMatchmakingId={}, reason={}",
+                matchmakingId, otherMatchmakingId, reason);
+        commandGateway.send(new MatchmakingCommand.FailMatchmakingCommand(matchmakingId, reason));
+        if (otherMatchmakingId != null) {
+            commandGateway.send(new MatchmakingCommand.FailMatchmakingCommand(otherMatchmakingId, reason));
+        }
     }
 
     /**
@@ -228,6 +290,7 @@ public class MatchmakingSaga {
 
     private void cancelDeadlines() {
         cancelDeadline();
+        cancelRoomCreationDeadline();
         if (purgeDeadlineId != null) {
             deadlineManager.cancelSchedule(MatchmakingDeadline.MATCHMAKING_PURGE, purgeDeadlineId);
             purgeDeadlineId = null;
@@ -238,6 +301,13 @@ public class MatchmakingSaga {
         if (deadlineId != null) {
             deadlineManager.cancelSchedule(MatchmakingDeadline.MATCHMAKING_DEADLINE, deadlineId);
             deadlineId = null;
+        }
+    }
+
+    private void cancelRoomCreationDeadline() {
+        if (roomCreationDeadlineId != null) {
+            deadlineManager.cancelSchedule(MatchmakingDeadline.MATCHMAKING_ROOM_CREATION, roomCreationDeadlineId);
+            roomCreationDeadlineId = null;
         }
     }
 

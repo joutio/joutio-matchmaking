@@ -46,6 +46,8 @@ public class ChallengeAggregate {
     private Instant remindableAt;
     /** Partie créée par la salle du défi (fait « le défi a abouti »), sinon {@code null}. */
     private String startedGameId;
+    /** Salle temps réel créée à l'acceptation, sinon {@code null} (pas encore créée). */
+    private String roomId;
 
     protected ChallengeAggregate() {
     }
@@ -147,6 +149,20 @@ public class ChallengeAggregate {
                 challengeId, challengerId, opponentId, command.gameId(), Instant.now()));
     }
 
+    /**
+     * Commande interne (saga) : la salle du défi a été créée. Idempotent (une seule salle par défi)
+     * et sans échec sur un fait dérivé : un défi non accepté (ou déjà pourvu d'une salle) ignore la
+     * commande.
+     */
+    @CommandHandler
+    public void handle(ChallengeCommand.MarkChallengeRoomCreatedCommand command) {
+        if (roomId != null || status != ChallengeStatus.ACCEPTED) {
+            return;
+        }
+        logger.info("Challenge room created: challengeId={}, roomId={}", challengeId, command.roomId());
+        apply(new ChallengeEvent.ChallengeRoomCreatedEvent(challengeId, command.roomId(), Instant.now()));
+    }
+
     // ---------------------------------------------------------------------
 
     // ── Validateurs (requireXxx : nommés, appelés en tête de handler) ──
@@ -214,6 +230,11 @@ public class ChallengeAggregate {
     @EventSourcingHandler
     public void on(ChallengeEvent.ChallengeStartedEvent event) {
         this.startedGameId = event.gameId();
+    }
+
+    @EventSourcingHandler
+    public void on(ChallengeEvent.ChallengeRoomCreatedEvent event) {
+        this.roomId = event.roomId();
     }
 
     @EventSourcingHandler

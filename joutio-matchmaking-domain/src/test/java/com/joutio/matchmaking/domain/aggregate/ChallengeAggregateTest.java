@@ -181,6 +181,23 @@ class ChallengeAggregateTest {
     }
 
     @Test
+    void markRoomCreated_afterAcceptance_appliesRoomCreated() {
+        fixture.given(created(), accepted())
+                .when(new ChallengeCommand.MarkChallengeRoomCreatedCommand(CHALLENGE_ID, "room-1"))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        ChallengeEvent.ChallengeRoomCreatedEvent.class,
+                        e -> "room-1".equals(((ChallengeEvent.ChallengeRoomCreatedEvent) e).roomId())));
+    }
+
+    @Test
+    void markRoomCreated_beforeAcceptance_isIgnored() {
+        // Fait dérivé de la salle : un défi non accepté ne fait jamais échouer la saga.
+        fixture.given(created())
+                .when(new ChallengeCommand.MarkChallengeRoomCreatedCommand(CHALLENGE_ID, "room-1"))
+                .expectNoEvents();
+    }
+
+    @Test
     void remind_byChallengerAfterCooldown_appliesReminded() {
         fixture.given(createdAt(Instant.now().minus(Duration.ofMinutes(11))))
                 .when(new ChallengeCommand.RemindChallengeCommand(CHALLENGE_ID, CHALLENGER))

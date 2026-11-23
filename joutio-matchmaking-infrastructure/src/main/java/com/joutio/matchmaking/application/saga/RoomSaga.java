@@ -68,49 +68,83 @@ public class RoomSaga {
 
     private static final Logger logger = LoggerFactory.getLogger(RoomSaga.class);
 
-    @Autowired private transient CommandGateway commandGateway;
+    @Autowired
+    private transient CommandGateway commandGateway;
 
-    @Autowired private transient DeadlineManager deadlineManager;
+    @Autowired
+    private transient DeadlineManager deadlineManager;
 
-    @Autowired private transient QuestionDrawPort questionDrawPort;
+    @Autowired
+    private transient QuestionDrawPort questionDrawPort;
 
     @Autowired
     private transient com.joutio.matchmaking.domain.port.out.TopicAvailabilityPort
             topicAvailability;
 
-    @Autowired private transient PlayedQuestionsPort playedQuestionsPort;
+    @Autowired
+    private transient PlayedQuestionsPort playedQuestionsPort;
 
-    @Autowired private transient GamePreparationService gamePreparationService;
+    @Autowired
+    private transient GamePreparationService gamePreparationService;
 
-    @Autowired private transient RoomFailureRecorder failureRecorder;
+    @Autowired
+    private transient RoomFailureRecorder failureRecorder;
 
-    @Getter @Setter private String roomId;
+    @Getter
+    @Setter
+    private String roomId;
 
-    @Getter @Setter private String topicId;
+    @Getter
+    @Setter
+    private String topicId;
 
-    @Getter @Setter private String initiatorId;
+    @Getter
+    @Setter
+    private String initiatorId;
 
-    @Getter @Setter private String participantId;
+    @Getter
+    @Setter
+    private String participantId;
 
-    @Getter @Setter private boolean vsBot;
+    @Getter
+    @Setter
+    private boolean vsBot;
 
-    @Getter @Setter private String botDifficulty;
+    @Getter
+    @Setter
+    private String botDifficulty;
 
-    @Getter @Setter private String expiryDeadlineId;
+    @Getter
+    @Setter
+    private String expiryDeadlineId;
 
-    @Getter @Setter private String purgeDeadlineId;
+    @Getter
+    @Setter
+    private String purgeDeadlineId;
 
-    @Getter @Setter private String gameId;
+    @Getter
+    @Setter
+    private String gameId;
 
-    @Getter @Setter private String gameCreationDeadlineId;
+    @Getter
+    @Setter
+    private String gameCreationDeadlineId;
 
-    @Getter @Setter private RoomPlayer initiatorProfile;
+    @Getter
+    @Setter
+    private RoomPlayer initiatorProfile;
 
-    @Getter @Setter private RoomPlayer participantProfile;
+    @Getter
+    @Setter
+    private RoomPlayer participantProfile;
 
-    @Getter @Setter private Set<String> playedQuestionIds;
+    @Getter
+    @Setter
+    private Set<String> playedQuestionIds;
 
-    @Getter @Setter private List<DrawnQuestion> drawnQuestions;
+    @Getter
+    @Setter
+    private List<DrawnQuestion> drawnQuestions;
 
     @StartSaga
     @SagaEventHandler(associationProperty = "roomId")
@@ -120,14 +154,13 @@ public class RoomSaga {
         this.initiatorId = event.initiatorId();
         this.vsBot = event.vsBot();
         this.botDifficulty = event.botDifficulty();
-        this.expiryDeadlineId =
-                deadlineManager.schedule(
-                        RoomDeadline.ROOM_EXPIRY_DURATION, RoomDeadline.ROOM_EXPIRY);
+        this.expiryDeadlineId = deadlineManager.schedule(RoomDeadline.ROOM_EXPIRY_DURATION, RoomDeadline.ROOM_EXPIRY);
         logger.info(
                 "Salle créée, expiration dans {}h: roomId={}, vsBot={}",
                 RoomDeadline.ROOM_EXPIRY_DURATION.toHours(),
                 roomId,
-                vsBot);
+                vsBot
+        );
     }
 
     /**
@@ -146,21 +179,27 @@ public class RoomSaga {
         logger.info("Apparition en salle: roomId={}, playerId={}", roomId, event.playerId());
     }
 
-    /** Les deux joueurs sont présents : les profils sont déjà portés par les apparitions. */
+    /**
+     * Les deux joueurs sont présents : les profils sont déjà portés par les apparitions.
+     */
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomAllPlayersPresentEvent event) {
         logger.info("Les deux joueurs sont présents, profils résolus: roomId={}", roomId);
         markPlayersLoaded();
     }
 
-    /** Profils résolus : étape 2, résolution de l'historique des questions jouées (joutio-game). */
+    /**
+     * Profils résolus : étape 2, résolution de l'historique des questions jouées (joutio-game).
+     */
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomPlayersLoadedEvent event) {
         logger.info("Profils chargés, résolution de l'historique des questions: roomId={}", roomId);
         resolvePlayedQuestions();
     }
 
-    /** Historique résolu : étape 3, tirage filtré des questions (vérification du sujet n°2). */
+    /**
+     * Historique résolu : étape 3, tirage filtré des questions (vérification du sujet n°2).
+     */
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomPlayedQuestionsLoadedEvent event) {
         this.playedQuestionIds = event.playedQuestionIds();
@@ -168,7 +207,9 @@ public class RoomSaga {
         drawQuestions();
     }
 
-    /** Fin de préparation (questions tirées) : la création de la partie est demandée (send). */
+    /**
+     * Fin de préparation (questions tirées) : la création de la partie est demandée (send).
+     */
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomQuestionsLoadedEvent event) {
         this.drawnQuestions = event.questions();
@@ -211,7 +252,9 @@ public class RoomSaga {
         requestGameCreation();
     }
 
-    /** Étape profils : snapshot déjà porté par les apparitions, simple avancement de statut. */
+    /**
+     * Étape profils : snapshot déjà porté par les apparitions, simple avancement de statut.
+     */
     private void markPlayersLoaded() {
         if (!profilesLoaded()) {
             return;
@@ -258,7 +301,9 @@ public class RoomSaga {
                         });
     }
 
-    /** Joueurs humains de la salle (le bot n'a pas d'historique). */
+    /**
+     * Joueurs humains de la salle (le bot n'a pas d'historique).
+     */
     private Set<String> humanPlayerIds() {
         Set<String> playerIds = new HashSet<>();
         playerIds.add(initiatorId);
@@ -315,7 +360,9 @@ public class RoomSaga {
                         });
     }
 
-    /** Contexte du tirage pour les logs d'échec : sujet, langues requises, salle bot ou non. */
+    /**
+     * Contexte du tirage pour les logs d'échec : sujet, langues requises, salle bot ou non.
+     */
     private String drawContext() {
         return "step=question-draw, topicId="
                 + topicId
@@ -325,7 +372,9 @@ public class RoomSaga {
                 + vsBot;
     }
 
-    /** Échec depuis le thread de la saga : consigné (log + métrique) puis annoncé à la salle. */
+    /**
+     * Échec depuis le thread de la saga : consigné (log + métrique) puis annoncé à la salle.
+     */
     private void fail(String reason, String context, Throwable cause) {
         fail(commandGateway, failureRecorder, roomId, reason, context, cause);
     }
@@ -393,7 +442,9 @@ public class RoomSaga {
         commandGateway.send(prepared);
     }
 
-    /** Accusé du service game : la partie existe, la salle peut être clôturée. */
+    /**
+     * Accusé du service game : la partie existe, la salle peut être clôturée.
+     */
     @SagaEventHandler(associationProperty = "gameId")
     public void on(GameEvent.GameCreatedEvent event) {
         cancelGameCreationDeadline();
@@ -401,7 +452,9 @@ public class RoomSaga {
         commandGateway.send(new RoomCommand.MarkRoomGameCreatedCommand(roomId, event.gameId()));
     }
 
-    /** La salle a accusé la création : clôture. */
+    /**
+     * La salle a accusé la création : clôture.
+     */
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomGameCreatedEvent event) {
         logger.info(

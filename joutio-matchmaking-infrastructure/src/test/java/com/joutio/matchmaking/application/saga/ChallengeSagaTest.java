@@ -65,6 +65,17 @@ class ChallengeSagaTest {
     }
 
     @Test
+    void roomCreated_marksChallengeRoomCreated() {
+        fixture.givenAPublished(created())
+                .andThenAPublished(accepted())
+                .whenPublishingA(new RoomEvent.RoomCreatedEvent(
+                        ChallengeRoomId.of(CHALLENGE_ID), TOPIC, CHALLENGER, OPPONENT, false, null,
+                        RoomOrigin.CHALLENGE, Instant.now().plusSeconds(3600), Instant.now()))
+                .expectDispatchedCommands(new ChallengeCommand.MarkChallengeRoomCreatedCommand(
+                        CHALLENGE_ID, ChallengeRoomId.of(CHALLENGE_ID)));
+    }
+
+    @Test
     void acceptedRematch_createsARematchRoom() {
         Instant now = fixture.currentTime();
         fixture.givenAPublished(new ChallengeEvent.ChallengeCreatedEvent(

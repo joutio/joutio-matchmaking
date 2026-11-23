@@ -49,7 +49,7 @@ class ChallengeProjectionTest {
     }
 
     @Test
-    void accepted_marksResolvedAndDerivesRoomLink() {
+    void accepted_marksResolvedWithoutRoomLink() {
         when(repository.findById("challenge-1")).thenReturn(Optional.of(challenge()));
 
         projection.on(new ChallengeEvent.ChallengeAcceptedEvent(
@@ -59,6 +59,18 @@ class ChallengeProjectionTest {
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().status()).isEqualTo(ChallengeStatus.ACCEPTED);
         assertThat(captor.getValue().resolvedAt()).isEqualTo(AT);
+        assertThat(captor.getValue().roomId()).isNull();
+    }
+
+    @Test
+    void roomCreated_setsRoomLink() {
+        when(repository.findById("challenge-1")).thenReturn(Optional.of(challenge()));
+
+        projection.on(new ChallengeEvent.ChallengeRoomCreatedEvent(
+                "challenge-1", ChallengeRoomId.of("challenge-1"), AT));
+
+        ArgumentCaptor<Challenge> captor = ArgumentCaptor.forClass(Challenge.class);
+        verify(repository).save(captor.capture());
         assertThat(captor.getValue().roomId()).isEqualTo(ChallengeRoomId.of("challenge-1"));
     }
 

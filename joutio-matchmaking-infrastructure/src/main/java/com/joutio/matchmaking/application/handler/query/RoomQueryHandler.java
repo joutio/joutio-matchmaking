@@ -5,7 +5,7 @@ import com.joutio.matchmaking.domain.model.Room;
 import com.joutio.matchmaking.domain.port.out.RoomEventStorePort;
 import com.joutio.matchmaking.domain.port.out.RoomRepositoryPort;
 import com.joutio.matchmaking.domain.query.RoomQuery;
-import com.joutio.microservice.core.domain.model.notification.EventEnvelope;
+import com.joutio.microservice.core.domain.model.event.EventEnvelope;
 import org.axonframework.queryhandling.QueryHandler;
 import org.springframework.stereotype.Component;
 

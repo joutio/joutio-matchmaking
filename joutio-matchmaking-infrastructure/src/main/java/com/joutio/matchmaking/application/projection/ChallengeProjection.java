@@ -2,7 +2,6 @@ package com.joutio.matchmaking.application.projection;
 
 import com.joutio.matchmaking.domain.event.ChallengeEvent;
 import com.joutio.matchmaking.domain.model.Challenge;
-import com.joutio.matchmaking.domain.model.ChallengeRoomId;
 import com.joutio.matchmaking.domain.model.ChallengeReminderRules;
 import com.joutio.matchmaking.domain.model.ChallengeStatus;
 import com.joutio.matchmaking.domain.port.out.ChallengeRepositoryPort;
@@ -53,10 +52,19 @@ public class ChallengeProjection {
     @EventHandler
     @Transactional
     public void on(ChallengeEvent.ChallengeAcceptedEvent event) {
+        // Le roomId n'est exposé qu'à la création effective de la salle (ChallengeRoomCreatedEvent) :
+        // accepter ne garantit pas que la salle existe encore (création fire-and-forget par la saga).
         update(event.challengeId(), challenge -> challenge.toBuilder()
                 .status(ChallengeStatus.ACCEPTED)
                 .resolvedAt(event.acceptedAt())
-                .roomId(ChallengeRoomId.of(event.challengeId()))
+                .build());
+    }
+
+    @EventHandler
+    @Transactional
+    public void on(ChallengeEvent.ChallengeRoomCreatedEvent event) {
+        update(event.challengeId(), challenge -> challenge.toBuilder()
+                .roomId(event.roomId())
                 .build());
     }
 

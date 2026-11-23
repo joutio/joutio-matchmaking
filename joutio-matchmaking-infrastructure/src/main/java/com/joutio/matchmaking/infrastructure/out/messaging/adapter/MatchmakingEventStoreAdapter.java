@@ -2,7 +2,7 @@ package com.joutio.matchmaking.infrastructure.out.messaging.adapter;
 
 import com.joutio.matchmaking.domain.event.MatchmakingEvent;
 import com.joutio.matchmaking.domain.port.out.MatchmakingEventStorePort;
-import com.joutio.microservice.core.domain.model.notification.EventEnvelope;
+import com.joutio.microservice.core.domain.model.event.EventEnvelope;
 import org.axonframework.eventhandling.DomainEventMessage;
 import org.axonframework.eventsourcing.eventstore.DomainEventStream;
 import org.axonframework.eventsourcing.eventstore.EventStore;

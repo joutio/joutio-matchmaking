@@ -34,6 +34,18 @@ public interface ChallengeEvent {
     }
 
     /**
+     * La salle du défi a été créée ({@code RoomCreatedEvent}) : le défi expose alors son
+     * {@code roomId}. Distinct de l'acceptation, qui ne garantit pas que la salle existe encore
+     * (création fire-and-forget par la saga).
+     */
+    record ChallengeRoomCreatedEvent(
+            String challengeId,
+            String roomId,
+            Instant roomCreatedAt
+    ) implements ChallengeEvent {
+    }
+
+    /**
      * La **partie du défi a été créée** : la salle issue de l'acceptation a produit un duel (les
      * deux joueurs se sont présentés). C'est le fait « le défi a abouti » — distinct de
      * l'acceptation, qui ne garantit pas que l'invité vienne jouer.

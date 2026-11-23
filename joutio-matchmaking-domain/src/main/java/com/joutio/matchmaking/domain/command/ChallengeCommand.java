@@ -28,6 +28,16 @@ public interface ChallengeCommand {
     ) implements ChallengeCommand {
     }
 
+    /**
+     * Commande interne (saga) : la salle du défi a été créée ({@code RoomCreatedEvent}) — le défi
+     * expose alors son {@code roomId}. Idempotent (une seule salle par défi).
+     */
+    record MarkChallengeRoomCreatedCommand(
+            @TargetAggregateIdentifier String challengeId,
+            String roomId
+    ) implements ChallengeCommand {
+    }
+
     /** B refuse. */
     record DeclineChallengeCommand(
             @TargetAggregateIdentifier String challengeId,
