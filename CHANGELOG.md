@@ -1,3 +1,9 @@
+## [2.6.0](https://github.com/joutio/joutio-matchmaking/compare/v2.5.0...v2.6.0) (2026-11-23)
+
+### Features
+
+* announce roomId only after the room is created ([d1cb8e6](https://github.com/joutio/joutio-matchmaking/commit/d1cb8e62caf1bc447602d9d3c174f9add34c9f98))
+
 ## [2.5.0](https://github.com/joutio/joutio-matchmaking/compare/v2.4.0...v2.5.0) (2026-11-20)
 
 ### Features
