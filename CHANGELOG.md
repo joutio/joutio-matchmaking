@@ -1,3 +1,9 @@
+## [3.0.1](https://github.com/joutio/joutio-matchmaking/compare/v3.0.0...v3.0.1) (2026-11-24)
+
+### Bug Fixes
+
+* **deps:** pin published game-domain 1.6.0 and theme-domain 3.9.7 ([b2bc7d8](https://github.com/joutio/joutio-matchmaking/commit/b2bc7d81fe39e34a84b106fb9c5d907468d802f3))
+
 ## [3.0.0](https://github.com/joutio/joutio-matchmaking/compare/v2.6.0...v3.0.0) (2026-11-24)
 
 ### ⚠ BREAKING CHANGES
