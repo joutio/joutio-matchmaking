@@ -12,8 +12,14 @@ public interface RoomRepositoryPort {
 
     Optional<Room> findById(String roomId);
 
-    /** Salles encore ouvertes d'un joueur ({@code WAITING_PLAYERS}, initiateur ou invité). */
-    List<Room> findWaitingByPlayerId(String playerId);
+    /** Salles non terminales d'un joueur (initiateur, invité ou participant), les plus récentes d'abord. */
+    List<Room> findActiveByPlayerId(String playerId);
+
+    /** Salles {@code INVITED} ou {@code WAITING_PLAYERS} qui réunissent les deux joueurs, dans un sens ou l'autre. */
+    List<Room> findOpenBetween(String playerId, String otherPlayerId);
+
+    /** Salles {@code INVITED} ou {@code WAITING_PLAYERS} dont l'échéance est antérieure à {@code before}. */
+    List<String> findOpenIdsExpiredBefore(Instant before);
 
     /** Salles en préparation ({@code FETCHING_*}, {@code CREATING_GAME}) sans mise à jour depuis {@code before}. */
     List<String> findStalledPreparationIdsBefore(Instant before);

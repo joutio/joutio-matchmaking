@@ -1,9 +1,9 @@
 package com.joutio.matchmaking.domain.command;
 
-import com.joutio.matchmaking.domain.model.RoomOrigin;
-
 import com.joutio.matchmaking.domain.model.DrawnQuestion;
+import com.joutio.matchmaking.domain.model.RoomCancelReason;
 import com.joutio.matchmaking.domain.model.RoomLeaveReason;
+import com.joutio.matchmaking.domain.model.RoomOrigin;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
 
 import org.axonframework.modelling.command.TargetAggregateIdentifier;
@@ -12,19 +12,20 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Commandes de la salle : deux humains (salle partagée ou appariement) ou un humain contre le bot.
- * L'identifiant de l'agrégat sert de référence de partage : le lien est {@code /join/{roomId}}.
+ * Commandes de la salle : défi ou revanche (invité nommé qui accepte), salon partagé par lien, appariement, ou
+ * entraînement contre le bot. L'identifiant de l'agrégat sert de référence de partage ({@code /j/{roomId}}).
  */
 public interface RoomCommand {
 
     String roomId();
 
     /**
-     * Ouvre une salle ; le créateur en est l'initiateur. Nominatif si {@code opponentId} est
-     * renseigné (défi, appariement) ; {@code vsBot} marque une salle dont le second joueur est le
-     * bot (join automatique par la saga). {@code botDifficulty} est le nom de l'enum game
-     * (nullable, défaut NORMAL) — porté en {@code String} pour que le domaine matchmaking ne
-     * dépende jamais du domaine game.
+     * Ouvre une salle ; le créateur en est l'initiateur. L'origine décide du second joueur
+     * ({@link RoomOrigin}) : défi et revanche nomment un invité qui doit accepter, l'appariement nomme les deux
+     * joueurs, un salon partagé n'a pas d'invité nommé. {@code vsBot} marque une salle dont le second joueur est le
+     * bot ; {@code botDifficulty} est le nom de l'enum game (nullable, défaut NORMAL), en {@code String} pour que
+     * le domaine matchmaking ne dépende pas du domaine game. {@code sourceGameId} : partie terminée d'origine d'une
+     * revanche.
      */
     record CreateRoomCommand(
             @TargetAggregateIdentifier String roomId,
@@ -33,8 +34,16 @@ public interface RoomCommand {
             String opponentId,
             boolean vsBot,
             String botDifficulty,
-            /** Origine (salon privé, défi, revanche, appariement, bot) : sections de l'écran Défis. */
-            RoomOrigin origin)
+            RoomOrigin origin,
+            String sourceGameId)
+            implements RoomCommand {}
+
+    /** L'invité accepte le défi : la salle s'ouvre aux deux joueurs. */
+    record AcceptRoomInvitationCommand(@TargetAggregateIdentifier String roomId, String playerId)
+            implements RoomCommand {}
+
+    /** L'invité refuse le défi : la salle se termine. */
+    record DeclineRoomInvitationCommand(@TargetAggregateIdentifier String roomId, String playerId)
             implements RoomCommand {}
 
     /**
@@ -69,19 +78,17 @@ public interface RoomCommand {
             implements RoomCommand {}
 
     /**
-     * Relance (« wizz ») : le joueur <b>présent</b> demande à l'autre joueur humain — absent — de
-     * rejoindre la salle. Pur effet temps réel (aucune préparation déclenchée) ; cadence par joueur
-     * ({@code RoomWizzRules}). Sans cible relançable (salle partagée sans invité, adversaire déjà
-     * présent, bot), la commande est refusée ; une préparation engagée l'ignore (le second joueur
-     * vient d'arriver).
+     * Relance, selon l'étape de la salle ({@code RoomReminderRules}) : en invitation, le lanceur renvoie son défi ;
+     * en attente des joueurs, un joueur présent appelle l'autre, absent. Une préparation engagée l'ignore.
      */
-    record WizzRoomCommand(@TargetAggregateIdentifier String roomId, String playerId)
+    record RemindRoomCommand(@TargetAggregateIdentifier String roomId, String playerId)
             implements RoomCommand {}
 
     /**
-     * L'initiateur annule explicitement la salle (possible tant que la salle n'est pas terminale).
+     * Annule la salle au nom de son initiateur (possible tant qu'elle n'est pas terminale) : bouton, ou blocage
+     * entre les deux joueurs.
      */
-    record CancelRoomCommand(@TargetAggregateIdentifier String roomId, String playerId)
+    record CancelRoomCommand(@TargetAggregateIdentifier String roomId, String playerId, RoomCancelReason reason)
             implements RoomCommand {}
 
     /** Commande interne (saga) : les profils des joueurs sont résolus. */
@@ -120,7 +127,7 @@ public interface RoomCommand {
     record FailRoomCommand(@TargetAggregateIdentifier String roomId, String reason)
             implements RoomCommand {}
 
-    /** Commande interne (saga) : salle jamais lancée, expirée. */
+    /** Commande interne (saga, balayeur) : l'échéance de l'étape en cours est passée. */
     record ExpireRoomCommand(@TargetAggregateIdentifier String roomId) implements RoomCommand {}
 
     /** Commande interne (saga, après rétention) : purge un état terminal. */

@@ -15,6 +15,8 @@ import java.time.Instant;
 /**
  * Filet des salles dont la deadline en mémoire a été perdue avec son pod (rollout, arrêt) :
  * <ul>
+ *   <li>invitation ou salle en attente dont l'échéance est passée depuis plus de
+ *       {@link RoomDeadline#ROOM_SWEEP_GRACE} → {@code ExpireRoomCommand} ;</li>
  *   <li>salle bloquée en préparation au-delà de {@link RoomDeadline#ROOM_PREPARATION_STALL} →
  *       {@code FailRoomCommand(ROOM_PREPARATION_STALLED)} ;</li>
  *   <li>salle terminale non purgée après rétention + {@link RoomDeadline#ROOM_SWEEP_GRACE} →
@@ -42,6 +44,8 @@ public class RoomSweeper {
 
     public void sweep() {
         Instant now = Instant.now();
+        roomRepositoryPort.findOpenIdsExpiredBefore(now.minus(RoomDeadline.ROOM_SWEEP_GRACE))
+                .forEach(roomId -> send(new RoomCommand.ExpireRoomCommand(roomId), roomId));
         roomRepositoryPort.findStalledPreparationIdsBefore(now.minus(RoomDeadline.ROOM_PREPARATION_STALL))
                 .forEach(roomId -> {
                     failureRecorder.record(roomId, RoomFailureReason.ROOM_PREPARATION_STALLED, "step=sweeper", null);

@@ -174,7 +174,7 @@ public class MatchmakingSaga {
                 "Création de salle demandée: matchmakingId={}, otherMatchmakingId={}, roomId={}",
                 matchmakingId, otherMatchmakingId, roomId);
         commandGateway.send(new RoomCommand.CreateRoomCommand(
-                roomId, topicId, playerId, candidate.playerId(), false, null, RoomOrigin.MATCHMAKING));
+                roomId, topicId, playerId, candidate.playerId(), false, null, RoomOrigin.MATCHMAKING, null));
         // La recherche est terminée (paire constituée) : le délai de recherche n'expire plus.
         cancelDeadline();
         this.finished = true;

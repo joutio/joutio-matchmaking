@@ -9,6 +9,8 @@ import com.joutio.matchmaking.domain.model.DrawnQuestion;
 import com.joutio.matchmaking.domain.model.DrawnQuestionDifficulty;
 import com.joutio.matchmaking.domain.model.QuestionLevelRules;
 import com.joutio.matchmaking.domain.model.RoomFailureReason;
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+import com.joutio.matchmaking.domain.model.RoomStatus;
 import com.joutio.matchmaking.domain.model.RoomDeadline;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
 import com.joutio.matchmaking.domain.port.out.PlayedQuestionsPort;
@@ -42,8 +44,9 @@ import java.util.concurrent.TimeUnit;
  * Orchestration de la salle temps réel — seul créateur de la partie (deux humains ou humain/bot).
  *
  * <ul>
- *   <li>{@code RoomCreatedEvent} → expiration de la salle (1 jour). La présence du bot ({@code
- *       vsBot}) est appliquée par l'agrégat à la création (aucun join système côté saga).
+ *   <li>{@code RoomCreatedEvent} → expiration à l'échéance de la première étape (réponse à
+ *       l'invitation, ou attente des joueurs) ; {@code RoomAcceptedEvent} → échéance de l'attente des
+ *       joueurs. La présence du bot ({@code vsBot}) est appliquée par l'agrégat à la création.
  *   <li>{@code RoomEnteredEvent} → mémorise le participant <b>et son snapshot de profil</b>
  *       (préparé par la façade et porté par l'événement : aucune I/O de la saga pour les profils).
  *   <li>{@code RoomAllPlayersPresentEvent} → les profils sont déjà connus, la saga avance le statut
@@ -90,6 +93,9 @@ public class RoomSaga {
     @Autowired
     private transient RoomFailureRecorder failureRecorder;
 
+    @Autowired
+    private transient RoomInvitationRecorder invitationRecorder;
+
     @Getter
     @Setter
     private String roomId;
@@ -113,6 +119,15 @@ public class RoomSaga {
     @Getter
     @Setter
     private String botDifficulty;
+
+    @Getter
+    @Setter
+    private RoomOrigin origin;
+
+    /** Défi en attente de réponse : une annulation ou une expiration le compte comme invitation sans suite. */
+    @Getter
+    @Setter
+    private boolean invitationPending;
 
     @Getter
     @Setter
@@ -154,13 +169,34 @@ public class RoomSaga {
         this.initiatorId = event.initiatorId();
         this.vsBot = event.vsBot();
         this.botDifficulty = event.botDifficulty();
-        this.expiryDeadlineId = deadlineManager.schedule(RoomDeadline.ROOM_EXPIRY_DURATION, RoomDeadline.ROOM_EXPIRY);
+        this.origin = event.origin();
+        this.invitationPending = event.status() == RoomStatus.INVITED;
+        if (invitationPending) {
+            invitationRecorder.record(origin, RoomInvitationRecorder.Outcome.SENT);
+        }
+        this.expiryDeadlineId = deadlineManager.schedule(event.expiresAt(), RoomDeadline.ROOM_EXPIRY);
         logger.info(
-                "Salle créée, expiration dans {}h: roomId={}, vsBot={}",
-                RoomDeadline.ROOM_EXPIRY_DURATION.toHours(),
+                "Salle créée: roomId={}, status={}, expiresAt={}, vsBot={}",
                 roomId,
+                event.status(),
+                event.expiresAt(),
                 vsBot
         );
+    }
+
+    /** Invitation acceptée : l'échéance passe à celle de l'attente des joueurs. */
+    @SagaEventHandler(associationProperty = "roomId")
+    public void on(RoomEvent.RoomAcceptedEvent event) {
+        endInvitation(RoomInvitationRecorder.Outcome.ACCEPTED);
+        cancelExpiryDeadline();
+        this.expiryDeadlineId = deadlineManager.schedule(event.expiresAt(), RoomDeadline.ROOM_EXPIRY);
+    }
+
+    @SagaEventHandler(associationProperty = "roomId")
+    public void on(RoomEvent.RoomDeclinedEvent event) {
+        endInvitation(RoomInvitationRecorder.Outcome.DECLINED);
+        cancelExpiryDeadline();
+        schedulePurge();
     }
 
     /**
@@ -493,12 +529,14 @@ public class RoomSaga {
 
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomCancelledEvent event) {
+        endInvitation(RoomInvitationRecorder.Outcome.CANCELLED);
         cancelGameCreationDeadline();
         schedulePurge();
     }
 
     @SagaEventHandler(associationProperty = "roomId")
     public void on(RoomEvent.RoomExpiredEvent event) {
+        endInvitation(RoomInvitationRecorder.Outcome.EXPIRED);
         cancelGameCreationDeadline();
         schedulePurge();
     }
@@ -525,6 +563,13 @@ public class RoomSaga {
     public void on(RoomEvent.RoomPurgedEvent event) {
         cancelAllDeadlines();
         logger.info("Saga salle terminée (purgée): roomId={}", roomId);
+    }
+
+    private void endInvitation(RoomInvitationRecorder.Outcome outcome) {
+        if (invitationPending) {
+            invitationPending = false;
+            invitationRecorder.record(origin, outcome);
+        }
     }
 
     private void schedulePurge() {

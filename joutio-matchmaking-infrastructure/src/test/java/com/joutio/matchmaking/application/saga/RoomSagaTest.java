@@ -17,6 +17,8 @@ import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.model.DrawnQuestion;
 import com.joutio.matchmaking.domain.model.DrawnQuestionChoice;
 import com.joutio.matchmaking.domain.model.DrawnQuestionDifficulty;
+import com.joutio.matchmaking.domain.model.RoomDeadline;
+import com.joutio.matchmaking.domain.model.RoomStatus;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
 import com.joutio.matchmaking.domain.port.out.PlayedQuestionsPort;
 import com.joutio.matchmaking.domain.port.out.QuestionDrawPort;
@@ -73,6 +75,7 @@ class RoomSagaTest {
         when(topicAvailability.playable(TOPIC)).thenReturn(CompletableFuture.completedFuture(true));
         fixture.registerResource(new GamePreparationService());
         fixture.registerResource(new RoomFailureRecorder(meterRegistry));
+        fixture.registerResource(new RoomInvitationRecorder(meterRegistry));
     }
 
     private double failures(String reason) {
@@ -221,8 +224,65 @@ class RoomSagaTest {
                 false,
                 null,
                 RoomOrigin.SHARED,
+                null,
+                RoomStatus.WAITING_PLAYERS,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
+    }
+
+    @Test
+    void invitation_expiresAtItsOwnDeadline_thenAcceptanceMovesTheDeadline() {
+        Instant created = fixture.currentTime();
+        Instant invitationExpiry = created.plusSeconds(3600);
+        Instant roomExpiry = created.plusSeconds(86_400);
+        fixture.givenAggregate(ROOM_ID).published()
+                .whenPublishingA(new RoomEvent.RoomCreatedEvent(
+                        ROOM_ID, TOPIC, INITIATOR, PARTICIPANT, false, null, RoomOrigin.CHALLENGE, null,
+                        RoomStatus.INVITED, invitationExpiry, created))
+                .expectScheduledDeadlineWithName(invitationExpiry, RoomDeadline.ROOM_EXPIRY);
+        fixture.whenPublishingA(new RoomEvent.RoomAcceptedEvent(
+                        ROOM_ID, TOPIC, INITIATOR, PARTICIPANT, RoomOrigin.CHALLENGE, roomExpiry, created))
+                .expectScheduledDeadlineWithName(roomExpiry, RoomDeadline.ROOM_EXPIRY)
+                .expectNoScheduledDeadlineWithName(invitationExpiry, RoomDeadline.ROOM_EXPIRY);
+    }
+
+    @Test
+    void invitations_areCountedByOutcome() {
+        Instant created = fixture.currentTime();
+        fixture.givenAggregate(ROOM_ID).published(new RoomEvent.RoomCreatedEvent(
+                        ROOM_ID, TOPIC, INITIATOR, PARTICIPANT, false, null, RoomOrigin.REMATCH, "game-0",
+                        RoomStatus.INVITED, created.plusSeconds(10), created))
+                .whenPublishingA(new RoomEvent.RoomExpiredEvent(ROOM_ID, Set.of(INITIATOR, PARTICIPANT), created));
+
+        assertThat(invitations("REMATCH", "SENT")).isEqualTo(1);
+        assertThat(invitations("REMATCH", "EXPIRED")).isEqualTo(1);
+    }
+
+    @Test
+    void sharedRoomCancellation_isNotAnInvitation() {
+        fixture.givenAggregate(ROOM_ID).published(roomCreated())
+                .whenPublishingA(new RoomEvent.RoomCancelledEvent(
+                        ROOM_ID, INITIATOR, com.joutio.matchmaking.domain.model.RoomCancelReason.PLAYER_CANCELLED,
+                        Set.of(INITIATOR), Instant.now()));
+
+        assertThat(meterRegistry.find("joutio.room.invitations").counters()).isEmpty();
+    }
+
+    private double invitations(String origin, String outcome) {
+        var counter = meterRegistry.find("joutio.room.invitations").tag("origin", origin).tag("outcome", outcome).counter();
+        return counter == null ? 0 : counter.count();
+    }
+
+    @Test
+    void declinedInvitation_isPurgedAfterRetention() {
+        Instant created = fixture.currentTime();
+        fixture.givenAggregate(ROOM_ID).published(new RoomEvent.RoomCreatedEvent(
+                        ROOM_ID, TOPIC, INITIATOR, PARTICIPANT, false, null, RoomOrigin.CHALLENGE, null,
+                        RoomStatus.INVITED, created.plusSeconds(3600), created))
+                .whenPublishingA(new RoomEvent.RoomDeclinedEvent(
+                        ROOM_ID, TOPIC, INITIATOR, PARTICIPANT, RoomOrigin.CHALLENGE, created))
+                .expectScheduledDeadlineWithName(RoomDeadline.ROOM_RETENTION_DURATION, RoomDeadline.ROOM_PURGE)
+                .expectNoScheduledDeadlineWithName(created.plusSeconds(3600), RoomDeadline.ROOM_EXPIRY);
     }
 
     private static RoomEvent.RoomEnteredEvent entered(RoomPlayer player) {

@@ -31,7 +31,7 @@ public class RoomQueryHandler {
 
     @QueryHandler
     public List<Room> handle(RoomQuery.GetMyOpenRooms query) {
-        return roomRepositoryPort.findWaitingByPlayerId(query.playerId());
+        return roomRepositoryPort.findActiveByPlayerId(query.playerId());
     }
 
     @QueryHandler

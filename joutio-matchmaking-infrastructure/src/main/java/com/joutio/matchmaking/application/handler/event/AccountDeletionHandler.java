@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Retire un compte supprimé du pool d'appariement et annule ses salles et défis encore ouverts.
+ * Retire un compte supprimé du pool d'appariement et annule ses salles encore ouvertes (défis compris).
  * Les agrégats éphémères sont purgés par leur rétention habituelle ; les notifications associées
  * sont supprimées par le service notification.
  */
@@ -34,10 +34,6 @@ public class AccountDeletionHandler {
                 SELECT room_id FROM room_entry
                 WHERE initiator_id = ? OR opponent_id = ? OR participant_id = ?
                 """, String.class, userId, userId, userId);
-        java.util.List<String> challengeIds = jdbcTemplate.queryForList("""
-                SELECT challenge_id FROM challenge_entry
-                WHERE challenger_id = ? OR opponent_id = ?
-                """, String.class, userId, userId);
         jdbcTemplate.update("""
                 DELETE FROM matchmaking_claim
                 WHERE matchmaking_id IN (SELECT matchmaking_id FROM matchmaking_entry WHERE player_id = ?)
@@ -46,16 +42,9 @@ public class AccountDeletionHandler {
         jdbcTemplate.update("""
                 UPDATE room_entry
                 SET status = 'CANCELLED', updated_at = now()
-                WHERE status NOT IN ('CANCELLED', 'COMPLETED', 'EXPIRED', 'FAILED')
+                WHERE status NOT IN ('CANCELLED', 'COMPLETED', 'DECLINED', 'EXPIRED', 'FAILED')
                   AND (initiator_id = ? OR opponent_id = ? OR participant_id = ?)
                 """, userId, userId, userId);
-        jdbcTemplate.update("""
-                UPDATE challenge_entry
-                SET status = 'CANCELLED', resolved_at = now()
-                WHERE status = 'PENDING' AND (challenger_id = ? OR opponent_id = ?)
-                """, userId, userId);
-        java.util.List<String> erasedAggregates = new java.util.ArrayList<>(roomIds);
-        erasedAggregates.addAll(challengeIds);
-        eventStoreErasureService.eraseAggregates(erasedAggregates);
+        eventStoreErasureService.eraseAggregates(roomIds);
     }
 }

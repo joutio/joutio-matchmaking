@@ -6,8 +6,10 @@ import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.exception.RoomExceptions;
 import com.joutio.matchmaking.domain.model.RoomDeadline;
+import com.joutio.matchmaking.domain.model.RoomOrigin;
+import com.joutio.matchmaking.domain.model.RoomReminderRules;
+import com.joutio.matchmaking.domain.model.RoomReminderStage;
 import com.joutio.matchmaking.domain.model.RoomStatus;
-import com.joutio.matchmaking.domain.model.RoomWizzRules;
 import com.joutio.microservice.core.domain.constant.JoutioConstants;
 
 import org.apache.commons.lang3.StringUtils;
@@ -19,12 +21,17 @@ import org.axonframework.spring.stereotype.Aggregate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Duration;
 import java.time.Instant;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
- * RoomAggregate — salle temps réel : deux humains (salle partagée ou appariement) ou un humain
- * contre le bot.
+ * RoomAggregate — salle de duel : défi ou revanche, salon partagé par lien, appariement, ou entraînement contre le
+ * bot.
+ *
+ * <p>Un défi est une étape de la salle : créée en {@code INVITED}, elle attend la réponse de l'invité nommé
+ * (accepter, refuser) jusqu'à son échéance ; acceptée, elle attend les deux joueurs comme toute autre salle. Les
+ * autres origines commencent directement en {@code WAITING_PLAYERS} ({@link RoomOrigin}).
  *
  * <p>Le créateur est l'initiateur ; le second humain devient participant lors de son
  * <b>apparition</b> dans la salle ({@code JoinRoomCommand}). La présence est observée par le
@@ -43,6 +50,9 @@ public class RoomAggregate {
 
     @AggregateIdentifier private String roomId;
     private boolean topicAvailabilityConfirmed;
+    private String topicId;
+    private RoomOrigin origin;
+    private String sourceGameId;
     private String initiatorId;
     private String opponentId;
     private String participantId;
@@ -55,32 +65,41 @@ public class RoomAggregate {
 
     private String participantPresenceId;
 
-    /** Dernière relance (« wizz ») de chaque joueur : cadence anti-spam, jamais bloquante. */
-    private Instant initiatorWizzedAt;
+    /** Échéance de l'étape en cours : une expiration plus précoce (deadline tardive) est ignorée. */
+    private Instant expiresAt;
 
-    private Instant participantWizzedAt;
+    /** Prochaine relance possible de l'invitation. */
+    private Instant invitationRemindableAt;
+
+    /** Dernier appel de chaque joueur présent vers l'autre, absent (cadence anti-spam). */
+    private Instant initiatorRemindedAt;
+
+    private Instant participantRemindedAt;
 
     protected RoomAggregate() {}
 
     /**
-     * Ouvre une salle. Si {@code opponentId} est renseigné, c'est une salle nominative : seul cet
-     * invité pourra apparaître comme second participant. {@code vsBot} marque le second joueur
-     * comme bot : sa présence est appliquée <b>dans la même unité de travail</b> que la création —
-     * aucune commande d'apparition supplémentaire par salle (le round-trip bloquant de la saga
-     * créait plusieurs minutes de lag sous charge, test 1000 parties).
+     * Ouvre une salle. L'invité doit correspondre à l'origine : un défi, une revanche ou un appariement nomment
+     * l'autre joueur, un salon partagé n'en nomme pas. {@code vsBot} marque le second joueur comme bot : sa
+     * présence est appliquée <b>dans la même unité de travail</b> que la création (aucune commande d'apparition
+     * supplémentaire, le round-trip de la saga créait plusieurs minutes de lag sous charge).
      */
     @CommandHandler
     public RoomAggregate(RoomCommand.CreateRoomCommand command) {
         requirePlayerId(command.initiatorId(), command.roomId());
         requireTopicId(command.topicId(), command.roomId());
+        requireConsistentInvitation(command);
 
+        RoomStatus initialStatus =
+                command.origin().requiresAcceptance() ? RoomStatus.INVITED : RoomStatus.WAITING_PLAYERS;
         logger.info(
-                "Creating room: roomId={}, topicId={}, initiatorId={}, opponentId={}, vsBot={}",
+                "Creating room: roomId={}, topicId={}, initiatorId={}, opponentId={}, origin={}, status={}",
                 command.roomId(),
                 command.topicId(),
                 command.initiatorId(),
                 command.opponentId(),
-                command.vsBot());
+                command.origin(),
+                initialStatus);
         Instant now = Instant.now();
         apply(
                 new RoomEvent.RoomCreatedEvent(
@@ -91,7 +110,9 @@ public class RoomAggregate {
                         command.vsBot(),
                         command.botDifficulty(),
                         command.origin(),
-                        now.plus(RoomDeadline.ROOM_EXPIRY_DURATION),
+                        command.sourceGameId(),
+                        initialStatus,
+                        RoomDeadline.expiryAtCreation(command.origin(), now),
                         now));
         if (command.vsBot()) {
             apply(
@@ -103,6 +124,39 @@ public class RoomAggregate {
                             null,
                             humanPlayers(command.initiatorId(), command.opponentId(), null)));
         }
+    }
+
+    /** L'invité accepte le défi (idempotent) : la salle attend désormais les deux joueurs. */
+    @CommandHandler
+    public void handle(RoomCommand.AcceptRoomInvitationCommand command) {
+        requireInvitee(command.playerId());
+        if (status == RoomStatus.WAITING_PLAYERS) {
+            return;
+        }
+        requireInvitation();
+        Instant now = Instant.now();
+        logger.info("Invitation accepted: roomId={}, opponentId={}", roomId, opponentId);
+        apply(
+                new RoomEvent.RoomAcceptedEvent(
+                        roomId,
+                        topicId,
+                        initiatorId,
+                        opponentId,
+                        origin,
+                        now.plus(RoomDeadline.ROOM_EXPIRY_DURATION),
+                        now));
+    }
+
+    /** L'invité refuse le défi (idempotent) : la salle se termine. */
+    @CommandHandler
+    public void handle(RoomCommand.DeclineRoomInvitationCommand command) {
+        requireInvitee(command.playerId());
+        if (status == RoomStatus.DECLINED) {
+            return;
+        }
+        requireInvitation();
+        logger.info("Invitation declined: roomId={}, opponentId={}", roomId, opponentId);
+        apply(new RoomEvent.RoomDeclinedEvent(roomId, topicId, initiatorId, opponentId, origin, Instant.now()));
     }
 
     /**
@@ -117,6 +171,9 @@ public class RoomAggregate {
         requirePlayerId(command.playerId(), roomId);
         if (isClosed()) {
             return;
+        }
+        if (status == RoomStatus.INVITED) {
+            throw new RoomExceptions.RoomInvitationPendingProblem(roomId);
         }
 
         boolean known =
@@ -207,39 +264,69 @@ public class RoomAggregate {
     }
 
     /**
-     * Relance (« wizz ») : le joueur <b>présent</b> demande à l'autre joueur humain — absent — de
-     * rejoindre la salle. Pur effet temps réel : la préparation n'est pas déclenchée et la cadence
-     * ({@code RoomWizzRules}, 10 s par joueur) borne le harcèlement. Sans cible relançable (salle
-     * partagée sans invité, adversaire déjà présent, bot), la commande est refusée ; une
-     * préparation engagée ou une salle terminale l'ignore (le second joueur vient d'arriver).
+     * Relance selon l'étape ({@link RoomReminderRules}) :
+     * <ul>
+     *   <li>invitation : le lanceur renvoie son défi à l'invité, au plus toutes les 10 min ;</li>
+     *   <li>attente des joueurs : un joueur présent appelle l'autre humain, absent, au plus toutes les 10 s.</li>
+     * </ul>
+     * Une préparation engagée ou une salle terminale l'ignore (le second joueur vient d'arriver).
      */
     @CommandHandler
-    public void handle(RoomCommand.WizzRoomCommand command) {
-        if (isClosed() || status != RoomStatus.WAITING_PLAYERS) {
-            // L'adversaire est là (préparation engagée) ou la salle est close : rien à relancer.
-            return;
-        }
-        requireParticipant(command.playerId());
-        if (!isPresent(command.playerId())) {
-            throw new RoomExceptions.RoomWizzRequesterNotPresentProblem(roomId, command.playerId());
-        }
-        String targetId = wizzableOpponent(command.playerId());
-        if (targetId == null) {
-            throw new RoomExceptions.RoomWizzUnavailableProblem(roomId);
-        }
+    public void handle(RoomCommand.RemindRoomCommand command) {
         Instant now = Instant.now();
-        if (isWithinWizzCooldown(command.playerId(), now)) {
-            throw new RoomExceptions.RoomWizzCooldownProblem(roomId, command.playerId());
+        if (status == RoomStatus.INVITED) {
+            remindInvitation(command.playerId(), now);
+        } else if (status == RoomStatus.WAITING_PLAYERS) {
+            remindAbsentPlayer(command.playerId(), now);
         }
-        logger.info(
-                "Player wizzed room: roomId={}, playerId={}, targetId={}",
-                roomId,
-                command.playerId(),
-                targetId);
-        apply(new RoomEvent.RoomWizzedEvent(roomId, command.playerId(), targetId, now));
     }
 
-    /** L'initiateur annule explicitement la salle, y compris pendant la préparation. */
+    private void remindInvitation(String playerId, Instant now) {
+        if (!initiatorId.equals(playerId)) {
+            throw new RoomExceptions.RoomReminderNotAllowedProblem(roomId, playerId);
+        }
+        if (now.isBefore(invitationRemindableAt)) {
+            throw new RoomExceptions.RoomReminderCooldownProblem(roomId, invitationRemindableAt);
+        }
+        logger.info("Invitation reminded: roomId={}, initiatorId={}", roomId, initiatorId);
+        apply(reminded(playerId, opponentId, RoomReminderStage.INVITATION, now));
+    }
+
+    private void remindAbsentPlayer(String playerId, Instant now) {
+        requireParticipant(playerId);
+        if (!isPresent(playerId)) {
+            throw new RoomExceptions.RoomReminderNotAllowedProblem(roomId, playerId);
+        }
+        String targetId = absentOpponent(playerId);
+        if (targetId == null) {
+            throw new RoomExceptions.RoomReminderUnavailableProblem(roomId);
+        }
+        Instant lastRemindedAt = playerId.equals(initiatorId) ? initiatorRemindedAt : participantRemindedAt;
+        if (lastRemindedAt != null) {
+            Instant remindableAt = RoomReminderRules.nextReminderAt(RoomReminderStage.PRESENCE, lastRemindedAt);
+            if (now.isBefore(remindableAt)) {
+                throw new RoomExceptions.RoomReminderCooldownProblem(roomId, remindableAt);
+            }
+        }
+        logger.info("Absent player reminded: roomId={}, playerId={}, targetId={}", roomId, playerId, targetId);
+        apply(reminded(playerId, targetId, RoomReminderStage.PRESENCE, now));
+    }
+
+    private RoomEvent.RoomRemindedEvent reminded(
+            String playerId, String targetId, RoomReminderStage stage, Instant now) {
+        return new RoomEvent.RoomRemindedEvent(
+                roomId,
+                playerId,
+                targetId,
+                stage,
+                topicId,
+                sourceGameId,
+                expiresAt,
+                now,
+                RoomReminderRules.nextReminderAt(stage, now));
+    }
+
+    /** L'initiateur annule la salle, y compris pendant l'invitation ou la préparation. */
     @CommandHandler
     public void handle(RoomCommand.CancelRoomCommand command) {
         if (isClosed()) {
@@ -250,7 +337,7 @@ public class RoomAggregate {
         }
         apply(
                 new RoomEvent.RoomCancelledEvent(
-                        roomId, initiatorId, "PLAYER_CANCELLED", Instant.now()));
+                        roomId, initiatorId, command.reason(), roomPlayers(), Instant.now()));
     }
 
     /** Commande interne (saga) : les profils sont résolus ; avance la préparation (monotone). */
@@ -311,7 +398,9 @@ public class RoomAggregate {
             throw new RoomExceptions.ParticipantNotPresentProblem(roomId);
         }
         logger.info("Completing room: roomId={}, gameId={}", roomId, command.gameId());
-        apply(new RoomEvent.RoomCompletedEvent(roomId, command.gameId(), Instant.now()));
+        apply(
+                new RoomEvent.RoomCompletedEvent(
+                        roomId, command.gameId(), origin, initiatorId, roomPlayers(), Instant.now()));
     }
 
     /**
@@ -326,12 +415,14 @@ public class RoomAggregate {
         apply(new RoomEvent.RoomFailedEvent(roomId, command.reason(), Instant.now()));
     }
 
+    /** Échéance de l'étape en cours ; une deadline antérieure à l'échéance (étape changée depuis) est ignorée. */
     @CommandHandler
     public void handle(RoomCommand.ExpireRoomCommand command) {
-        if (isClosed()) {
+        Instant now = Instant.now();
+        if (isClosed() || now.isBefore(expiresAt)) {
             return;
         }
-        apply(new RoomEvent.RoomExpiredEvent(roomId, Instant.now()));
+        apply(new RoomEvent.RoomExpiredEvent(roomId, roomPlayers(), now));
     }
 
     @CommandHandler
@@ -362,6 +453,31 @@ public class RoomAggregate {
         }
     }
 
+    private static void requireConsistentInvitation(RoomCommand.CreateRoomCommand command) {
+        boolean named = StringUtils.isNotBlank(command.opponentId());
+        RoomOrigin origin = command.origin();
+        boolean consistent =
+                origin != null && (origin.isNominative() ? named : origin != RoomOrigin.SHARED || !named);
+        if (!consistent) {
+            throw new RoomExceptions.RoomInvalidInvitationProblem(command.roomId(), String.valueOf(origin));
+        }
+        if (named && command.opponentId().equals(command.initiatorId())) {
+            throw new RoomExceptions.RoomSelfInvitationProblem(command.roomId());
+        }
+    }
+
+    private void requireInvitee(String playerId) {
+        if (StringUtils.isBlank(playerId) || !origin.requiresAcceptance() || !playerId.equals(opponentId)) {
+            throw new RoomExceptions.RoomNotInvitedProblem(roomId, String.valueOf(playerId));
+        }
+    }
+
+    private void requireInvitation() {
+        if (status != RoomStatus.INVITED) {
+            throw new RoomExceptions.RoomNotInvitationProblem(roomId, status.name());
+        }
+    }
+
     private void requireParticipant(String playerId) {
         if (StringUtils.isBlank(playerId)
                 || (!playerId.equals(initiatorId) && !playerId.equals(participantId))) {
@@ -375,12 +491,10 @@ public class RoomAggregate {
     }
 
     /**
-     * Adversaire relançable du point de vue du joueur : l'autre humain de la salle, à condition
-     * qu'il soit <b>absent</b> (invité nominatif pas encore apparu, participant sorti non
-     * destructivement). {@code null} quand il n'y a rien à relancer (salle partagée sans invité,
-     * adversaire déjà présent, adversaire système/bot).
+     * L'autre humain de la salle, s'il est <b>absent</b> (invité pas encore apparu, participant sorti) ; {@code null}
+     * quand il n'y a personne à appeler (salon partagé sans participant, adversaire présent, bot).
      */
-    private String wizzableOpponent(String playerId) {
+    private String absentOpponent(String playerId) {
         boolean fromInitiator = playerId.equals(initiatorId);
         String targetId =
                 fromInitiator ? (participantId != null ? participantId : opponentId) : initiatorId;
@@ -389,16 +503,6 @@ public class RoomAggregate {
         }
         boolean targetPresent = fromInitiator ? participantPresent : initiatorPresent;
         return targetPresent ? null : targetId;
-    }
-
-    /** Cadence anti-spam : le dernier wizz du joueur n'est pas encore absorbé. */
-    private boolean isWithinWizzCooldown(String playerId, Instant now) {
-        Instant lastWizzedAt =
-                playerId.equals(initiatorId) ? initiatorWizzedAt : participantWizzedAt;
-        return lastWizzedAt != null
-                && Duration.between(lastWizzedAt, now)
-                                .compareTo(RoomWizzRules.WIZZ_COOLDOWN_DURATION)
-                        < 0;
     }
 
     private String presenceIdOf(String playerId) {
@@ -417,10 +521,11 @@ public class RoomAggregate {
     }
 
     private boolean isClosed() {
-        return status == RoomStatus.COMPLETED
-                || status == RoomStatus.CANCELLED
-                || status == RoomStatus.EXPIRED
-                || status == RoomStatus.FAILED;
+        return status.isTerminal();
+    }
+
+    private Set<String> roomPlayers() {
+        return humanPlayers(initiatorId, opponentId, participantId);
     }
 
     // ============================ Event Sourcing ============================
@@ -428,9 +533,26 @@ public class RoomAggregate {
     @EventSourcingHandler
     public void on(RoomEvent.RoomCreatedEvent event) {
         this.roomId = event.roomId();
+        this.topicId = event.topicId();
+        this.origin = event.origin();
+        this.sourceGameId = event.sourceGameId();
         this.initiatorId = event.initiatorId();
         this.opponentId = event.opponentId();
+        this.status = event.status();
+        this.expiresAt = event.expiresAt();
+        this.invitationRemindableAt =
+                RoomReminderRules.nextReminderAt(RoomReminderStage.INVITATION, event.createdAt());
+    }
+
+    @EventSourcingHandler
+    public void on(RoomEvent.RoomAcceptedEvent event) {
         this.status = RoomStatus.WAITING_PLAYERS;
+        this.expiresAt = event.expiresAt();
+    }
+
+    @EventSourcingHandler
+    public void on(RoomEvent.RoomDeclinedEvent event) {
+        this.status = RoomStatus.DECLINED;
     }
 
     /**
@@ -490,13 +612,14 @@ public class RoomAggregate {
         }
     }
 
-    /** Relance : mémorise l'instant par joueur (cadence anti-spam). */
     @EventSourcingHandler
-    public void on(RoomEvent.RoomWizzedEvent event) {
-        if (event.playerId().equals(initiatorId)) {
-            this.initiatorWizzedAt = event.wizzedAt();
+    public void on(RoomEvent.RoomRemindedEvent event) {
+        if (event.stage() == RoomReminderStage.INVITATION) {
+            this.invitationRemindableAt = event.remindableAt();
+        } else if (event.playerId().equals(initiatorId)) {
+            this.initiatorRemindedAt = event.remindedAt();
         } else {
-            this.participantWizzedAt = event.wizzedAt();
+            this.participantRemindedAt = event.remindedAt();
         }
     }
 
@@ -537,13 +660,13 @@ public class RoomAggregate {
     }
 
     /** Joueurs humains du salon (sans le bot), dans l'ordre, pour les événements de présence. */
-    private static java.util.Set<String> humanPlayers(String... ids) {
-        java.util.Set<String> players = new java.util.LinkedHashSet<>();
+    private static Set<String> humanPlayers(String... ids) {
+        Set<String> players = new LinkedHashSet<>();
         for (String id : ids) {
             if (StringUtils.isNotBlank(id) && !JoutioConstants.SYSTEM_USER_ID.equals(id)) {
                 players.add(id);
             }
         }
-        return java.util.Set.copyOf(players);
+        return Set.copyOf(players);
     }
 }

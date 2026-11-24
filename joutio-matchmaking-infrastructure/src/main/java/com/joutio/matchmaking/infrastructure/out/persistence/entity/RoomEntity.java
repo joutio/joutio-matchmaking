@@ -9,10 +9,7 @@ import lombok.Setter;
 
 import java.time.Instant;
 
-/**
- * Projection de la salle (salle d'attente temps réel). Les états terminaux sont conservés le
- * temps de la rétention puis purgés par la saga.
- */
+/** Projection de la salle. Les états terminaux sont conservés le temps de la rétention puis purgés par la saga. */
 @Setter
 @Getter
 @Entity
@@ -50,8 +47,11 @@ public class RoomEntity {
     @Column(name = "origin", nullable = false, length = 20)
     private RoomOrigin origin;
 
+    @Column(name = "source_game_id")
+    private String sourceGameId;
+
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 30)
     private RoomStatus status;
 
     @Column(name = "initiator_present", nullable = false)
@@ -65,6 +65,9 @@ public class RoomEntity {
 
     @Column(name = "expires_at", nullable = false)
     private Instant expiresAt;
+
+    @Column(name = "remindable_at")
+    private Instant remindableAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;

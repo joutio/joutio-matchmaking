@@ -6,8 +6,11 @@ import com.joutio.axon.test.JoutioAxonMatchers;
 import com.joutio.matchmaking.domain.command.RoomCommand;
 import com.joutio.matchmaking.domain.event.RoomEvent;
 import com.joutio.matchmaking.domain.exception.RoomExceptions;
+import com.joutio.matchmaking.domain.model.RoomCancelReason;
 import com.joutio.matchmaking.domain.model.RoomLeaveReason;
 import com.joutio.matchmaking.domain.model.RoomPlayer;
+import com.joutio.matchmaking.domain.model.RoomReminderStage;
+import com.joutio.matchmaking.domain.model.RoomStatus;
 import com.joutio.microservice.core.domain.constant.JoutioConstants;
 import com.joutio.microservice.core.domain.model.i18n.Language;
 
@@ -54,7 +57,7 @@ class RoomAggregateTest {
         fixture.givenNoPriorActivity()
                 .when(
                         new RoomCommand.CreateRoomCommand(
-                                ROOM_ID, TOPIC, INITIATOR, null, false, null, RoomOrigin.SHARED))
+                                ROOM_ID, TOPIC, INITIATOR, null, false, null, RoomOrigin.SHARED, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
                                 RoomEvent.RoomCreatedEvent.class,
@@ -69,17 +72,18 @@ class RoomAggregateTest {
     }
 
     @Test
-    void createNominalRoom_appliesCreatedEventWithOpponent() {
+    void createChallenge_startsInvited() {
         fixture.givenNoPriorActivity()
                 .when(
                         new RoomCommand.CreateRoomCommand(
-                                ROOM_ID, TOPIC, INITIATOR, OPPONENT, false, null, RoomOrigin.CHALLENGE))
+                                ROOM_ID, TOPIC, INITIATOR, OPPONENT, false, null, RoomOrigin.CHALLENGE, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
                                 RoomEvent.RoomCreatedEvent.class,
                                 e ->
-                                        OPPONENT.equals(
-                                                ((RoomEvent.RoomCreatedEvent) e).opponentId())));
+                                        OPPONENT.equals(((RoomEvent.RoomCreatedEvent) e).opponentId())
+                                                && ((RoomEvent.RoomCreatedEvent) e).status()
+                                                        == RoomStatus.INVITED));
     }
 
     @Test
@@ -93,7 +97,7 @@ class RoomAggregateTest {
                                 JoutioConstants.SYSTEM_USER_ID,
                                 true,
                                 "HARD",
-                                RoomOrigin.BOT))
+                                RoomOrigin.BOT, null))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomCreatedEvent.class,
@@ -498,7 +502,7 @@ class RoomAggregateTest {
     @Test
     void cancel_byInitiator_closesRoom() {
         fixture.given(created())
-                .when(new RoomCommand.CancelRoomCommand(ROOM_ID, INITIATOR))
+                .when(new RoomCommand.CancelRoomCommand(ROOM_ID, INITIATOR, RoomCancelReason.PLAYER_CANCELLED))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomCancelledEvent.class,
@@ -515,7 +519,7 @@ class RoomAggregateTest {
                         entered(PARTICIPANT_PLAYER),
                         allPresent(),
                         playersLoaded())
-                .when(new RoomCommand.CancelRoomCommand(ROOM_ID, INITIATOR))
+                .when(new RoomCommand.CancelRoomCommand(ROOM_ID, INITIATOR, RoomCancelReason.PLAYER_CANCELLED))
                 .expectEventsMatching(
                         JoutioAxonMatchers.hasPayloadMatching(
                                 RoomEvent.RoomCancelledEvent.class, e -> true));
@@ -524,7 +528,7 @@ class RoomAggregateTest {
     @Test
     void cancel_refusedToSecondPlayer() {
         fixture.given(created(), entered(INITIATOR_PLAYER), entered(PARTICIPANT_PLAYER))
-                .when(new RoomCommand.CancelRoomCommand(ROOM_ID, PARTICIPANT))
+                .when(new RoomCommand.CancelRoomCommand(ROOM_ID, PARTICIPANT, RoomCancelReason.PLAYER_CANCELLED))
                 .expectException(RoomExceptions.PlayerNotInRoomProblem.class);
     }
 
@@ -549,106 +553,104 @@ class RoomAggregateTest {
     }
 
     @Test
-    void wizz_notifiesAbsentNominalOpponent() {
+    void presenceReminder_notifiesAbsentNominalOpponent() {
         fixture.given(createdWithOpponent(), entered(INITIATOR_PLAYER))
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
-                                RoomEvent.RoomWizzedEvent.class,
+                                RoomEvent.RoomRemindedEvent.class,
                                 e ->
-                                        INITIATOR.equals(((RoomEvent.RoomWizzedEvent) e).playerId())
+                                        INITIATOR.equals(((RoomEvent.RoomRemindedEvent) e).playerId())
                                                 && OPPONENT.equals(
-                                                        ((RoomEvent.RoomWizzedEvent) e)
+                                                        ((RoomEvent.RoomRemindedEvent) e)
                                                                 .targetId())));
     }
 
     @Test
-    void wizz_isSymmetric_earlyGuestNudgesAbsentInitiator() {
+    void presenceReminder_isSymmetric_earlyGuestNudgesAbsentInitiator() {
         fixture.given(createdWithOpponent(), entered(OPPONENT_PLAYER))
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, OPPONENT))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, OPPONENT))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
-                                RoomEvent.RoomWizzedEvent.class,
+                                RoomEvent.RoomRemindedEvent.class,
                                 e ->
-                                        OPPONENT.equals(((RoomEvent.RoomWizzedEvent) e).playerId())
+                                        OPPONENT.equals(((RoomEvent.RoomRemindedEvent) e).playerId())
                                                 && INITIATOR.equals(
-                                                        ((RoomEvent.RoomWizzedEvent) e)
+                                                        ((RoomEvent.RoomRemindedEvent) e)
                                                                 .targetId())));
     }
 
     @Test
-    void wizz_refusedWhenRequesterNotPresent() {
+    void presenceReminder_refusedWhenRequesterNotPresent() {
         fixture.given(createdWithOpponent())
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
-                .expectException(RoomExceptions.RoomWizzRequesterNotPresentProblem.class);
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
+                .expectException(RoomExceptions.RoomReminderNotAllowedProblem.class);
     }
 
     @Test
-    void wizz_refusedWithoutNamedOpponent() {
+    void presenceReminder_refusedWithoutNamedOpponent() {
         fixture.given(created(), entered(INITIATOR_PLAYER))
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
-                .expectException(RoomExceptions.RoomWizzUnavailableProblem.class);
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
+                .expectException(RoomExceptions.RoomReminderUnavailableProblem.class);
     }
 
     @Test
-    void wizz_refusedToOutsider() {
+    void presenceReminder_refusedToOutsider() {
         fixture.given(createdWithOpponent(), entered(INITIATOR_PLAYER))
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, OTHER))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, OTHER))
                 .expectException(RoomExceptions.PlayerNotInRoomProblem.class);
     }
 
     @Test
-    void wizz_refusedWithinCooldown() {
+    void presenceReminder_refusedWithinCooldown() {
         fixture.given(
                         createdWithOpponent(),
                         entered(INITIATOR_PLAYER),
-                        new RoomEvent.RoomWizzedEvent(ROOM_ID, INITIATOR, OPPONENT, Instant.now()))
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
-                .expectException(RoomExceptions.RoomWizzCooldownProblem.class);
+                        presenceReminded(Instant.now()))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
+                .expectException(RoomExceptions.RoomReminderCooldownProblem.class);
     }
 
     @Test
-    void wizz_allowedOnceCooldownElapsed() {
+    void presenceReminder_allowedOnceCooldownElapsed() {
         fixture.given(
                         createdWithOpponent(),
                         entered(INITIATOR_PLAYER),
-                        new RoomEvent.RoomWizzedEvent(
-                                ROOM_ID, INITIATOR, OPPONENT, Instant.now().minusSeconds(11)))
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
+                        presenceReminded(Instant.now().minusSeconds(11)))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
                 .expectEventsMatching(
                         JoutioAxonMatchers.singlePayloadMatching(
-                                RoomEvent.RoomWizzedEvent.class,
-                                e -> INITIATOR.equals(((RoomEvent.RoomWizzedEvent) e).playerId())));
+                                RoomEvent.RoomRemindedEvent.class,
+                                e -> INITIATOR.equals(((RoomEvent.RoomRemindedEvent) e).playerId())));
     }
 
     @Test
-    void wizz_ignoredOncePreparationStarted() {
+    void presenceReminder_ignoredOncePreparationStarted() {
         fixture.given(
                         createdWithOpponent(),
                         entered(INITIATOR_PLAYER),
                         entered(OPPONENT_PLAYER),
                         allPresent())
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
                 .expectNoEvents();
     }
 
     @Test
-    void wizz_ignoredWhenRoomClosed() {
+    void presenceReminder_ignoredWhenRoomClosed() {
         fixture.given(
                         createdWithOpponent(),
                         entered(INITIATOR_PLAYER),
-                        new RoomEvent.RoomCancelledEvent(
-                                ROOM_ID, INITIATOR, "PLAYER_CANCELLED", Instant.now()))
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
+                        new RoomEvent.RoomCancelledEvent(ROOM_ID, INITIATOR, RoomCancelReason.PLAYER_CANCELLED, Set.of(), Instant.now()))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
                 .expectNoEvents();
     }
 
     @Test
-    void wizz_botRoom_neverWizzable() {
+    void presenceReminder_botRoom_neverWizzable() {
         // Salle bot : le bot est présent dès la création, l'humain qui apparaît engage la
         // préparation dans la même unité de travail → plus rien à relancer.
         fixture.given(createdBot(), enteredBot(), entered(INITIATOR_PLAYER), allPresent())
-                .when(new RoomCommand.WizzRoomCommand(ROOM_ID, INITIATOR))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
                 .expectNoEvents();
     }
 
@@ -661,10 +663,13 @@ class RoomAggregateTest {
                 false,
                 null,
                 RoomOrigin.SHARED,
+                null,
+                RoomStatus.WAITING_PLAYERS,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
     }
 
+    /** Salle nominative ouverte (appariement, ou défi déjà accepté). */
     private static RoomEvent.RoomCreatedEvent createdWithOpponent() {
         return new RoomEvent.RoomCreatedEvent(
                 ROOM_ID,
@@ -673,9 +678,49 @@ class RoomAggregateTest {
                 OPPONENT,
                 false,
                 null,
-                RoomOrigin.CHALLENGE,
+                RoomOrigin.MATCHMAKING,
+                null,
+                RoomStatus.WAITING_PLAYERS,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
+    }
+
+    /** Défi envoyé, en attente de la réponse de l'invité. */
+    private static RoomEvent.RoomCreatedEvent invited(Instant createdAt) {
+        return new RoomEvent.RoomCreatedEvent(
+                ROOM_ID,
+                TOPIC,
+                INITIATOR,
+                OPPONENT,
+                false,
+                null,
+                RoomOrigin.CHALLENGE,
+                null,
+                RoomStatus.INVITED,
+                createdAt.plusSeconds(3600),
+                createdAt);
+    }
+
+    private static RoomEvent.RoomCreatedEvent invited() {
+        return invited(Instant.now());
+    }
+
+    private static RoomEvent.RoomAcceptedEvent accepted() {
+        return new RoomEvent.RoomAcceptedEvent(
+                ROOM_ID, TOPIC, INITIATOR, OPPONENT, RoomOrigin.CHALLENGE, Instant.now().plusSeconds(86_400), Instant.now());
+    }
+
+    private static RoomEvent.RoomRemindedEvent presenceReminded(Instant at) {
+        return new RoomEvent.RoomRemindedEvent(
+                ROOM_ID,
+                INITIATOR,
+                OPPONENT,
+                RoomReminderStage.PRESENCE,
+                TOPIC,
+                null,
+                Instant.now().plusSeconds(3600),
+                at,
+                at.plusSeconds(10));
     }
 
     private static RoomEvent.RoomCreatedEvent createdBot() {
@@ -687,6 +732,8 @@ class RoomAggregateTest {
                 true,
                 "NORMAL",
                 RoomOrigin.BOT,
+                null,
+                RoomStatus.WAITING_PLAYERS,
                 Instant.now().plusSeconds(3600),
                 Instant.now());
     }
@@ -750,9 +797,214 @@ class RoomAggregateTest {
                         playersLoaded(),
                         playedQuestionsLoaded(),
                         questionsLoaded(),
-                        new RoomEvent.RoomCancelledEvent(
-                                ROOM_ID, INITIATOR, "PLAYER_CANCELLED", Instant.now()))
+                        new RoomEvent.RoomCancelledEvent(ROOM_ID, INITIATOR, RoomCancelReason.PLAYER_CANCELLED, Set.of(), Instant.now()))
                 .when(new RoomCommand.ConfirmRoomTopicAvailabilityCommand(ROOM_ID))
                 .expectNoEvents();
+    }
+
+    // ── Invitation (défi, revanche) ──
+
+    @Test
+    void createSharedRoom_withNamedOpponent_isRefused() {
+        fixture.givenNoPriorActivity()
+                .when(new RoomCommand.CreateRoomCommand(
+                        ROOM_ID, TOPIC, INITIATOR, OPPONENT, false, null, RoomOrigin.SHARED, null))
+                .expectException(RoomExceptions.RoomInvalidInvitationProblem.class);
+    }
+
+    @Test
+    void createChallenge_withoutOpponent_isRefused() {
+        fixture.givenNoPriorActivity()
+                .when(new RoomCommand.CreateRoomCommand(
+                        ROOM_ID, TOPIC, INITIATOR, null, false, null, RoomOrigin.CHALLENGE, null))
+                .expectException(RoomExceptions.RoomInvalidInvitationProblem.class);
+    }
+
+    @Test
+    void createChallenge_againstSelf_isRefused() {
+        fixture.givenNoPriorActivity()
+                .when(new RoomCommand.CreateRoomCommand(
+                        ROOM_ID, TOPIC, INITIATOR, INITIATOR, false, null, RoomOrigin.CHALLENGE, null))
+                .expectException(RoomExceptions.RoomSelfInvitationProblem.class);
+    }
+
+    @Test
+    void createRematch_expiresAfterTenSeconds_andCarriesTheSourceGame() {
+        fixture.givenNoPriorActivity()
+                .when(new RoomCommand.CreateRoomCommand(
+                        ROOM_ID, TOPIC, INITIATOR, OPPONENT, false, null, RoomOrigin.REMATCH, "game-0"))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomCreatedEvent.class,
+                        e -> {
+                            RoomEvent.RoomCreatedEvent created = (RoomEvent.RoomCreatedEvent) e;
+                            return "game-0".equals(created.sourceGameId())
+                                    && created.status() == RoomStatus.INVITED
+                                    && created.expiresAt().equals(created.createdAt().plusSeconds(10));
+                        }));
+    }
+
+    @Test
+    void invitation_refusesEveryJoin() {
+        fixture.given(invited())
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, INITIATOR, INITIATOR_PLAYER, "s1"))
+                .expectException(RoomExceptions.RoomInvitationPendingProblem.class);
+    }
+
+    @Test
+    void accept_byInvitee_opensTheRoomForADay() {
+        fixture.given(invited())
+                .when(new RoomCommand.AcceptRoomInvitationCommand(ROOM_ID, OPPONENT))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomAcceptedEvent.class,
+                        e -> {
+                            RoomEvent.RoomAcceptedEvent accepted = (RoomEvent.RoomAcceptedEvent) e;
+                            return INITIATOR.equals(accepted.initiatorId())
+                                    && accepted.expiresAt().isAfter(Instant.now().plusSeconds(86_000));
+                        }));
+    }
+
+    @Test
+    void accept_twice_isIdempotent() {
+        fixture.given(invited(), accepted())
+                .when(new RoomCommand.AcceptRoomInvitationCommand(ROOM_ID, OPPONENT))
+                .expectNoEvents();
+    }
+
+    @Test
+    void accept_byAnotherPlayer_isRefused() {
+        fixture.given(invited())
+                .when(new RoomCommand.AcceptRoomInvitationCommand(ROOM_ID, INITIATOR))
+                .expectException(RoomExceptions.RoomNotInvitedProblem.class);
+    }
+
+    @Test
+    void accept_ofADeclinedInvitation_isRefused() {
+        fixture.given(invited(), declined())
+                .when(new RoomCommand.AcceptRoomInvitationCommand(ROOM_ID, OPPONENT))
+                .expectException(RoomExceptions.RoomNotInvitationProblem.class);
+    }
+
+    @Test
+    void accept_ofASharedRoom_isRefused() {
+        fixture.given(created())
+                .when(new RoomCommand.AcceptRoomInvitationCommand(ROOM_ID, PARTICIPANT))
+                .expectException(RoomExceptions.RoomNotInvitedProblem.class);
+    }
+
+    @Test
+    void acceptedInvitation_letsTheInviteeJoin() {
+        fixture.given(invited(), accepted())
+                .when(new RoomCommand.JoinRoomCommand(ROOM_ID, OPPONENT, OPPONENT_PLAYER, "s2"))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomEnteredEvent.class,
+                        e -> OPPONENT.equals(((RoomEvent.RoomEnteredEvent) e).playerId())));
+    }
+
+    @Test
+    void decline_byInvitee_endsTheRoom() {
+        fixture.given(invited())
+                .when(new RoomCommand.DeclineRoomInvitationCommand(ROOM_ID, OPPONENT))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomDeclinedEvent.class,
+                        e -> OPPONENT.equals(((RoomEvent.RoomDeclinedEvent) e).opponentId())));
+    }
+
+    @Test
+    void decline_twice_isIdempotent() {
+        fixture.given(invited(), declined())
+                .when(new RoomCommand.DeclineRoomInvitationCommand(ROOM_ID, OPPONENT))
+                .expectNoEvents();
+    }
+
+    @Test
+    void decline_afterAcceptance_isRefused() {
+        fixture.given(invited(), accepted())
+                .when(new RoomCommand.DeclineRoomInvitationCommand(ROOM_ID, OPPONENT))
+                .expectException(RoomExceptions.RoomNotInvitationProblem.class);
+    }
+
+    @Test
+    void cancel_ofAnInvitation_carriesBothPlayers() {
+        fixture.given(invited())
+                .when(new RoomCommand.CancelRoomCommand(ROOM_ID, INITIATOR, RoomCancelReason.PLAYER_BLOCKED))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomCancelledEvent.class,
+                        e -> {
+                            RoomEvent.RoomCancelledEvent cancelled = (RoomEvent.RoomCancelledEvent) e;
+                            return cancelled.reason() == RoomCancelReason.PLAYER_BLOCKED
+                                    && cancelled.roomPlayerIds().equals(Set.of(INITIATOR, OPPONENT));
+                        }));
+    }
+
+    @Test
+    void invitationReminder_isRefusedBeforeTenMinutes() {
+        fixture.given(invited())
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
+                .expectException(RoomExceptions.RoomReminderCooldownProblem.class);
+    }
+
+    @Test
+    void invitationReminder_afterTenMinutes_resendsTheInvitation() {
+        fixture.given(invited(Instant.now().minusSeconds(601)))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, INITIATOR))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomRemindedEvent.class,
+                        e -> {
+                            RoomEvent.RoomRemindedEvent reminded = (RoomEvent.RoomRemindedEvent) e;
+                            return reminded.stage() == RoomReminderStage.INVITATION
+                                    && OPPONENT.equals(reminded.targetId())
+                                    && reminded.remindableAt().equals(reminded.remindedAt().plusSeconds(600));
+                        }));
+    }
+
+    @Test
+    void invitationReminder_byInvitee_isRefused() {
+        fixture.given(invited(Instant.now().minusSeconds(601)))
+                .when(new RoomCommand.RemindRoomCommand(ROOM_ID, OPPONENT))
+                .expectException(RoomExceptions.RoomReminderNotAllowedProblem.class);
+    }
+
+    @Test
+    void expiry_ofAnInvitation_endsTheRoom() {
+        fixture.given(invited(Instant.now().minusSeconds(3601)))
+                .when(new RoomCommand.ExpireRoomCommand(ROOM_ID))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomExpiredEvent.class,
+                        e -> ((RoomEvent.RoomExpiredEvent) e).roomPlayerIds().equals(Set.of(INITIATOR, OPPONENT))));
+    }
+
+    @Test
+    void expiry_beforeTheDeadlineOfTheCurrentStage_isIgnored() {
+        // Deadline de l'invitation qui arrive après l'acceptation : la salle attend désormais un jour.
+        fixture.given(invited(Instant.now().minusSeconds(3601)), accepted())
+                .when(new RoomCommand.ExpireRoomCommand(ROOM_ID))
+                .expectNoEvents();
+    }
+
+    @Test
+    void completion_carriesOriginAndInitiator() {
+        fixture.given(
+                        invited(),
+                        accepted(),
+                        entered(INITIATOR_PLAYER),
+                        entered(OPPONENT_PLAYER),
+                        allPresent(),
+                        playersLoaded(),
+                        playedQuestionsLoaded(),
+                        questionsLoaded(),
+                        gameCreated())
+                .when(new RoomCommand.CompleteRoomCommand(ROOM_ID, "game-1"))
+                .expectEventsMatching(JoutioAxonMatchers.singlePayloadMatching(
+                        RoomEvent.RoomCompletedEvent.class,
+                        e -> {
+                            RoomEvent.RoomCompletedEvent completed = (RoomEvent.RoomCompletedEvent) e;
+                            return completed.origin() == RoomOrigin.CHALLENGE
+                                    && INITIATOR.equals(completed.initiatorId());
+                        }));
+    }
+
+    private static RoomEvent.RoomDeclinedEvent declined() {
+        return new RoomEvent.RoomDeclinedEvent(
+                ROOM_ID, TOPIC, INITIATOR, OPPONENT, RoomOrigin.CHALLENGE, Instant.now());
     }
 }

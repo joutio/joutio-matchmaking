@@ -2,6 +2,7 @@ package com.joutio.matchmaking.domain.exception;
 
 import com.joutio.microservice.core.domain.exception.ProblemCategory;
 
+import java.time.Instant;
 import java.util.Map;
 
 public final class RoomExceptions {
@@ -62,8 +63,8 @@ public final class RoomExceptions {
         public RoomNotInvitedProblem(String roomId, String playerId) {
             super(roomId, "urn:joutio:room:notInvited",
                     ProblemCategory.PERMISSION,
-                    "Défi non adressé",
-                    "Le joueur " + playerId + " n'est pas l'invité de ce défi",
+                    "Salle non adressée",
+                    "Le joueur " + playerId + " n'est pas l'invité de cette salle",
                     Map.of("playerId", playerId));
         }
     }
@@ -75,35 +76,69 @@ public final class RoomExceptions {
         }
     }
 
-    /** La relance exige un joueur réellement présent dans la salle (« connecté en attente »). */
-    public static class RoomWizzRequesterNotPresentProblem extends RoomProblem {
-        public RoomWizzRequesterNotPresentProblem(String roomId, String playerId) {
-            super(roomId, "urn:joutio:room:wizzRequesterNotPresent",
-                    "Joueur non présent",
-                    "Le joueur " + playerId + " doit être présent dans la salle pour relancer son adversaire",
+    /** Personne n'entre tant que l'invité n'a pas accepté le défi. */
+    public static class RoomInvitationPendingProblem extends RoomProblem {
+        public RoomInvitationPendingProblem(String roomId) {
+            super(roomId, "urn:joutio:room:invitationPending",
+                    "Défi en attente", "L'invité n'a pas encore accepté ce défi");
+        }
+    }
+
+    /** Accepter, refuser ou relancer une invitation qui n'est plus en attente. */
+    public static class RoomNotInvitationProblem extends RoomProblem {
+        public RoomNotInvitationProblem(String roomId, String status) {
+            super(roomId, "urn:joutio:room:notInvitation",
+                    ProblemCategory.BUSINESS_AGGREGATE,
+                    "Défi résolu",
+                    "Ce défi n'est plus en attente (" + status + ")",
+                    Map.of("status", status));
+        }
+    }
+
+    public static class RoomSelfInvitationProblem extends RoomProblem {
+        public RoomSelfInvitationProblem(String roomId) {
+            super(roomId, "urn:joutio:room:selfInvitation",
+                    "Défi impossible", "Un joueur ne peut pas se défier lui-même");
+        }
+    }
+
+    /** L'invité ne correspond pas à l'origine : un défi nomme son invité, un salon partagé n'en nomme pas. */
+    public static class RoomInvalidInvitationProblem extends RoomProblem {
+        public RoomInvalidInvitationProblem(String roomId, String origin) {
+            super(roomId, "urn:joutio:room:invalidInvitation",
+                    "Invité incohérent",
+                    "L'invité de la salle ne correspond pas à son origine (" + origin + ")",
+                    Map.of("origin", origin));
+        }
+    }
+
+    /** Seul le lanceur relance son invitation ; en salle, seul un joueur présent appelle l'autre. */
+    public static class RoomReminderNotAllowedProblem extends RoomProblem {
+        public RoomReminderNotAllowedProblem(String roomId, String playerId) {
+            super(roomId, "urn:joutio:room:reminderNotAllowed",
+                    ProblemCategory.PERMISSION,
+                    "Relance impossible",
+                    "Le joueur " + playerId + " ne peut pas relancer cette salle",
                     Map.of("playerId", playerId));
         }
     }
 
-    /**
-     * Rien à relancer : salle partagée sans invité nommé, adversaire déjà présent ou adversaire
-     * système (bot).
-     */
-    public static class RoomWizzUnavailableProblem extends RoomProblem {
-        public RoomWizzUnavailableProblem(String roomId) {
-            super(roomId, "urn:joutio:room:wizzUnavailable",
+    /** Rien à relancer : salon partagé sans participant, adversaire déjà présent ou bot. */
+    public static class RoomReminderUnavailableProblem extends RoomProblem {
+        public RoomReminderUnavailableProblem(String roomId) {
+            super(roomId, "urn:joutio:room:reminderUnavailable",
                     "Aucun adversaire à relancer",
                     "Cette salle n'a pas d'adversaire humain absent à relancer");
         }
     }
 
-    /** Cadence anti-spam : un même joueur ne peut pas relancer avant la fin du délai. */
-    public static class RoomWizzCooldownProblem extends RoomProblem {
-        public RoomWizzCooldownProblem(String roomId, String playerId) {
-            super(roomId, "urn:joutio:room:wizzCooldown",
+    /** Cadence de la relance ({@code RoomReminderRules}) : prochaine relance à {@code remindableAt}. */
+    public static class RoomReminderCooldownProblem extends RoomProblem {
+        public RoomReminderCooldownProblem(String roomId, Instant remindableAt) {
+            super(roomId, "urn:joutio:room:reminderCooldown",
                     "Relance trop rapide",
-                    "Le joueur " + playerId + " vient déjà de relancer son adversaire",
-                    Map.of("playerId", playerId));
+                    "Prochaine relance possible à " + remindableAt,
+                    Map.of("remindableAt", remindableAt.toString()));
         }
     }
 }

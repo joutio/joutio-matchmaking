@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -18,11 +19,13 @@ import java.util.Set;
 @Component
 public class RoomRepositoryAdapter implements RoomRepositoryPort {
 
+    private static final Set<RoomStatus> OPEN = EnumSet.of(RoomStatus.INVITED, RoomStatus.WAITING_PLAYERS);
     private static final Set<RoomStatus> PREPARING = EnumSet.of(
             RoomStatus.FETCHING_PLAYERS, RoomStatus.FETCHING_PLAYED_QUESTIONS,
             RoomStatus.FETCHING_QUESTIONS, RoomStatus.CREATING_GAME);
-    private static final Set<RoomStatus> TERMINAL = EnumSet.of(
-            RoomStatus.COMPLETED, RoomStatus.CANCELLED, RoomStatus.EXPIRED, RoomStatus.FAILED);
+    private static final Set<RoomStatus> NOT_TERMINAL = EnumSet.copyOf(
+            Arrays.stream(RoomStatus.values()).filter(status -> !status.isTerminal()).toList());
+    private static final Set<RoomStatus> TERMINAL = EnumSet.complementOf(EnumSet.copyOf(NOT_TERMINAL));
 
     private final RoomJpaRepository roomJpaRepository;
 
@@ -44,10 +47,24 @@ public class RoomRepositoryAdapter implements RoomRepositoryPort {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Room> findWaitingByPlayerId(String playerId) {
-        return roomJpaRepository.findOpenByPlayerId(playerId, Instant.now()).stream()
+    public List<Room> findActiveByPlayerId(String playerId) {
+        return roomJpaRepository.findByPlayerIdAndStatusIn(playerId, NOT_TERMINAL).stream()
                 .map(RoomEntityMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Room> findOpenBetween(String playerId, String otherPlayerId) {
+        return roomJpaRepository.findBetween(playerId, otherPlayerId, OPEN).stream()
+                .map(RoomEntityMapper::toDomain)
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<String> findOpenIdsExpiredBefore(Instant before) {
+        return roomJpaRepository.findIdsByStatusExpiringBefore(OPEN, before);
     }
 
     @Override

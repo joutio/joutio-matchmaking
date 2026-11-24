@@ -28,7 +28,8 @@ class RoomSweeperTest {
     private final RoomSweeper sweeper = new RoomSweeper(repository, commandGateway, failureRecorder);
 
     @Test
-    void sweepFailsStalledRoomsAndPurgesForgottenTerminalRooms() {
+    void sweepExpiresOverdueRooms_failsStalledRooms_andPurgesForgottenTerminalRooms() {
+        when(repository.findOpenIdsExpiredBefore(any(Instant.class))).thenReturn(List.of("overdue"));
         when(repository.findStalledPreparationIdsBefore(any(Instant.class))).thenReturn(List.of("stalled"));
         when(repository.findTerminalIdsBefore(any(Instant.class))).thenReturn(List.of("terminal"));
         when(commandGateway.send(any())).thenReturn(CompletableFuture.completedFuture(null));
@@ -36,8 +37,9 @@ class RoomSweeperTest {
         sweeper.sweep();
 
         ArgumentCaptor<Object> commands = ArgumentCaptor.forClass(Object.class);
-        verify(commandGateway, times(2)).send(commands.capture());
+        verify(commandGateway, times(3)).send(commands.capture());
         assertThat(commands.getAllValues()).containsExactly(
+                new RoomCommand.ExpireRoomCommand("overdue"),
                 new RoomCommand.FailRoomCommand("stalled", RoomFailureReason.ROOM_PREPARATION_STALLED),
                 new RoomCommand.PurgeRoomCommand("terminal"));
         verify(failureRecorder).record("stalled", RoomFailureReason.ROOM_PREPARATION_STALLED, "step=sweeper", null);

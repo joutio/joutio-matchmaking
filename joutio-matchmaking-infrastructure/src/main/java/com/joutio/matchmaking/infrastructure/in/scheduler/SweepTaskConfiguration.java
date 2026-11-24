@@ -18,12 +18,6 @@ public class SweepTaskConfiguration {
     private static final Duration SWEEP_INTERVAL = Duration.ofMinutes(1);
 
     @Bean
-    public RecurringTask<Void> challengePurgeSweepTask(ChallengePurgeSweeper sweeper) {
-        return Tasks.recurring("challenge-purge-sweep", FixedDelay.of(SWEEP_INTERVAL))
-                .execute((instance, context) -> sweeper.sweep());
-    }
-
-    @Bean
     public RecurringTask<Void> roomSweepTask(RoomSweeper sweeper) {
         return Tasks.recurring("room-sweep", FixedDelay.of(SWEEP_INTERVAL))
                 .execute((instance, context) -> sweeper.sweep());
