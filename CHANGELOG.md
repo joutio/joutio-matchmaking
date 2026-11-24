@@ -1,3 +1,15 @@
+## [3.0.0](https://github.com/joutio/joutio-matchmaking/compare/v2.6.0...v3.0.0) (2026-11-24)
+
+### ⚠ BREAKING CHANGES
+
+* Challenge* commands, events, queries and models are removed;
+RoomCreatedEvent, RoomCancelledEvent, RoomExpiredEvent and RoomCompletedEvent gain
+fields, RoomWizzedEvent/WizzRoomCommand become RoomRemindedEvent/RemindRoomCommand.
+
+### Features
+
+* model a challenge as the INVITED step of a room ([82bb1ea](https://github.com/joutio/joutio-matchmaking/commit/82bb1eacf68435cc4ac12a12cde111fee7f2393d))
+
 ## [2.6.0](https://github.com/joutio/joutio-matchmaking/compare/v2.5.0...v2.6.0) (2026-11-23)
 
 ### Features
