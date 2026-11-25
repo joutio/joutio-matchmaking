@@ -1,3 +1,9 @@
+## [3.0.2](https://github.com/joutio/joutio-matchmaking/compare/v3.0.1...v3.0.2) (2026-11-25)
+
+### Bug Fixes
+
+* **deps:** joutio-parent 3.1.0 with the gRPC bus foundation ([7ba58a4](https://github.com/joutio/joutio-matchmaking/commit/7ba58a4b21a36cfb547c3a419f3a0cfd4fdf825e))
+
 ## [3.0.1](https://github.com/joutio/joutio-matchmaking/compare/v3.0.0...v3.0.1) (2026-11-24)
 
 ### Bug Fixes
