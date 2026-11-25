@@ -11,3 +11,9 @@ spring:
     url: jdbc:postgresql://localhost:5432/joutio_matchmaking
     username: postgres
     password: postgres
+
+joutio:
+  axon:
+    grpc:
+      # Port du bus gRPC en local (8124 en prod), aligné sur la découverte de joutio-local.yml.
+      port: 18090
