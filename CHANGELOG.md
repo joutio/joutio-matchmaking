@@ -1,3 +1,9 @@
+## [3.1.0](https://github.com/joutio/joutio-matchmaking/compare/v3.0.3...v3.1.0) (2026-11-26)
+
+### Features
+
+* **rooms:** room and ticket streams and my rooms as live views ([cf20008](https://github.com/joutio/joutio-matchmaking/commit/cf2000874754b4fc94a430410d7b46b7999a3c63))
+
 ## [3.0.3](https://github.com/joutio/joutio-matchmaking/compare/v3.0.2...v3.0.3) (2026-11-25)
 
 ### Bug Fixes
