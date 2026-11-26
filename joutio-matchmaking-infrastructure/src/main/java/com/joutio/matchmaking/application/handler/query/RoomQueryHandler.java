@@ -1,6 +1,8 @@
 package com.joutio.matchmaking.application.handler.query;
 
+import com.joutio.matchmaking.application.service.MyRoomsService;
 import com.joutio.matchmaking.domain.exception.RoomExceptions;
+import com.joutio.matchmaking.domain.model.MyRooms;
 import com.joutio.matchmaking.domain.model.Room;
 import com.joutio.matchmaking.domain.port.out.RoomEventStorePort;
 import com.joutio.matchmaking.domain.port.out.RoomRepositoryPort;
@@ -16,11 +18,14 @@ public class RoomQueryHandler {
 
     private final RoomRepositoryPort roomRepositoryPort;
     private final RoomEventStorePort roomEventStorePort;
+    private final MyRoomsService myRooms;
 
     public RoomQueryHandler(RoomRepositoryPort roomRepositoryPort,
-                            RoomEventStorePort roomEventStorePort) {
+                            RoomEventStorePort roomEventStorePort,
+                            MyRoomsService myRooms) {
         this.roomRepositoryPort = roomRepositoryPort;
         this.roomEventStorePort = roomEventStorePort;
+        this.myRooms = myRooms;
     }
 
     @QueryHandler
@@ -32,6 +37,11 @@ public class RoomQueryHandler {
     @QueryHandler
     public List<Room> handle(RoomQuery.GetMyOpenRooms query) {
         return roomRepositoryPort.findActiveByPlayerId(query.playerId());
+    }
+
+    @QueryHandler
+    public MyRooms handle(RoomQuery.GetMyRooms query) {
+        return myRooms.read(query.playerId());
     }
 
     @QueryHandler

@@ -5,6 +5,7 @@ import com.joutio.matchmaking.domain.model.Room;
 import com.joutio.matchmaking.domain.model.RoomReminderRules;
 import com.joutio.matchmaking.domain.model.RoomReminderStage;
 import com.joutio.matchmaking.domain.model.RoomStatus;
+import com.joutio.matchmaking.application.service.MyRoomsService;
 import com.joutio.matchmaking.domain.port.out.RoomRepositoryPort;
 import org.axonframework.config.ProcessingGroup;
 import org.axonframework.eventhandling.EventHandler;
@@ -22,15 +23,17 @@ import java.util.function.UnaryOperator;
 public class RoomProjection {
 
     private final RoomRepositoryPort roomRepositoryPort;
+    private final MyRoomsService myRooms;
 
-    public RoomProjection(RoomRepositoryPort roomRepositoryPort) {
+    public RoomProjection(RoomRepositoryPort roomRepositoryPort, MyRoomsService myRooms) {
         this.roomRepositoryPort = roomRepositoryPort;
+        this.myRooms = myRooms;
     }
 
     @EventHandler
     @Transactional
     public void on(RoomEvent.RoomCreatedEvent event) {
-        roomRepositoryPort.save(Room.builder()
+        save(Room.builder()
                 .roomId(event.roomId())
                 .topicId(event.topicId())
                 .initiatorId(event.initiatorId())
@@ -203,7 +206,12 @@ public class RoomProjection {
     }
 
     private void update(String roomId, UnaryOperator<Room> transform) {
-        roomRepositoryPort.findById(roomId).ifPresent(room ->
-                roomRepositoryPort.save(transform.apply(room)));
+        roomRepositoryPort.findById(roomId).ifPresent(room -> save(transform.apply(room)));
+    }
+
+    /** Toute écriture d'une salle change les salles de ses joueurs (vue vivante {@code GetMyRooms}). */
+    private void save(Room room) {
+        roomRepositoryPort.save(room);
+        myRooms.changed(room);
     }
 }

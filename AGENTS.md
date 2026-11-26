@@ -93,15 +93,27 @@ Les deux agrégats sont **éphémères** : un état terminal est gardé 2 min (`
 - `UserBlockRoomHandler` : sur `UserBlockedEvent` (social), annule les salles `INVITED` ou `WAITING_PLAYERS` entre
   les deux joueurs (invité ou participant), au nom de leur initiateur (`PLAYER_BLOCKED`).
 
+## Vues vivantes
+
+- **Flux des salles et des tickets** : `LiveStreamHandler`, groupe local `matchmaking-live`
+  (`joutio.axon.local-groups`), émet chaque événement à `GetRoomEventsQuery` ou `GetMatchmakingEventsQuery` au commit
+  de la commande, sans Kafka. Le BFF les relaie sur `/topic/rooms/{id}` et `/topic/matchmaking/tickets/{id}`.
+- **Salles du joueur** (`GetMyRooms` → `MyRooms { playerId, version, rooms }`) : `MyRoomsService.changed(room)`,
+  appelé par `RoomProjection` à chaque écriture d'une salle. Pour chaque joueur humain de la salle, la version
+  (`my_rooms_version`, upsert qui verrouille la ligne) est incrémentée, puis les salles sont relues dans la même
+  transaction ; l'émission part au commit. Toute nouvelle écriture d'une salle passe par `save` de la projection,
+  sinon l'onglet Défis reste sur l'ancienne liste.
+
 ## Contrats (`joutio-matchmaking-domain`)
 
-- Requêtes : `MatchmakingQuery`, `RoomQuery` (`GetRoomById`, `GetMyOpenRooms` : salles non terminales du
-  joueur, invitations comprises, `GetRoomEventsQuery`).
+- Requêtes : `MatchmakingQuery` (`GetMatchmakingEventsQuery` : flux du ticket, vue vivante), `RoomQuery`
+  (`GetRoomById`, `GetMyOpenRooms` : salles non terminales du joueur, invitations comprises, `GetMyRooms` : les mêmes
+  en vue vivante, `GetRoomEventsQuery` : flux de la salle, vue vivante).
 - Événements utiles hors du service :
   - `RoomCreated/Accepted/Declined/Reminded/Cancelled/Expired/PurgedEvent` (notification, BFF) ;
   - `RoomCompletedEvent` (notification ; profile : badge Défis, par `origin` et `initiatorId`) ;
-  - `RoomEnteredEvent` et `RoomLeftEvent`, avec `roomPlayerIds` (BFF : pastille de présence). `RoomCancelled`,
-    `RoomExpired` et `RoomCompleted` portent aussi `roomPlayerIds`.
+  - `RoomEnteredEvent` et `RoomLeftEvent`, avec `roomPlayerIds`. `RoomCancelled`, `RoomExpired` et `RoomCompleted`
+    portent aussi `roomPlayerIds`, que plus aucun consommateur ne lit depuis `live-salles-matchmaking`.
 - Contrats consommés : `joutio-game-domain`, `joutio-theme-domain`, `joutio-profile-domain`,
   `joutio-identity-domain`, `joutio-social-domain`.
 

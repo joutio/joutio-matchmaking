@@ -27,6 +27,10 @@ joutio:
     # répliques par le rééquilibreur du SDK. Appliqué à la création du token (base vierge).
     # Un segment par réplique : chaque segment, même au repos, coûte une transaction par
     # `joutio.axon.event-availability-timeout`. N'en ajouter que si un lag est mesuré.
+    # Groupes locaux (SDK 3.3.0) : abonnés au bus d'événements du pod, sans Kafka, exécutés dans la transaction de la
+    # commande. matchmaking-live (LiveStreamHandler) pousse au BFF le flux des salles et des tickets au commit.
+    local-groups:
+      - matchmaking-live
     processors:
       room-saga:
         segments: 2

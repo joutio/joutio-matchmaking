@@ -48,7 +48,8 @@ public class RoomAggregate {
 
     private static final Logger logger = LoggerFactory.getLogger(RoomAggregate.class);
 
-    @AggregateIdentifier private String roomId;
+    @AggregateIdentifier
+    private String roomId;
     private boolean topicAvailabilityConfirmed;
     private String topicId;
     private RoomOrigin origin;
@@ -60,23 +61,32 @@ public class RoomAggregate {
     private boolean initiatorPresent;
     private boolean participantPresent;
 
-    /** Session temps réel qui porte la présence de chaque joueur (nulle : ancien client, bot). */
+    /**
+     * Session temps réel qui porte la présence de chaque joueur (nulle : ancien client, bot).
+     */
     private String initiatorPresenceId;
 
     private String participantPresenceId;
 
-    /** Échéance de l'étape en cours : une expiration plus précoce (deadline tardive) est ignorée. */
+    /**
+     * Échéance de l'étape en cours : une expiration plus précoce (deadline tardive) est ignorée.
+     */
     private Instant expiresAt;
 
-    /** Prochaine relance possible de l'invitation. */
+    /**
+     * Prochaine relance possible de l'invitation.
+     */
     private Instant invitationRemindableAt;
 
-    /** Dernier appel de chaque joueur présent vers l'autre, absent (cadence anti-spam). */
+    /**
+     * Dernier appel de chaque joueur présent vers l'autre, absent (cadence anti-spam).
+     */
     private Instant initiatorRemindedAt;
 
     private Instant participantRemindedAt;
 
-    protected RoomAggregate() {}
+    protected RoomAggregate() {
+    }
 
     /**
      * Ouvre une salle. L'invité doit correspondre à l'origine : un défi, une revanche ou un appariement nomment
@@ -99,7 +109,8 @@ public class RoomAggregate {
                 command.initiatorId(),
                 command.opponentId(),
                 command.origin(),
-                initialStatus);
+                initialStatus
+        );
         Instant now = Instant.now();
         apply(
                 new RoomEvent.RoomCreatedEvent(
@@ -113,7 +124,9 @@ public class RoomAggregate {
                         command.sourceGameId(),
                         initialStatus,
                         RoomDeadline.expiryAtCreation(command.origin(), now),
-                        now));
+                        now
+                )
+        );
         if (command.vsBot()) {
             apply(
                     new RoomEvent.RoomEnteredEvent(
@@ -122,11 +135,15 @@ public class RoomAggregate {
                             null,
                             now,
                             null,
-                            humanPlayers(command.initiatorId(), command.opponentId(), null)));
+                            humanPlayers(command.initiatorId(), command.opponentId(), null)
+                    )
+            );
         }
     }
 
-    /** L'invité accepte le défi (idempotent) : la salle attend désormais les deux joueurs. */
+    /**
+     * L'invité accepte le défi (idempotent) : la salle attend désormais les deux joueurs.
+     */
     @CommandHandler
     public void handle(RoomCommand.AcceptRoomInvitationCommand command) {
         requireInvitee(command.playerId());
@@ -144,10 +161,13 @@ public class RoomAggregate {
                         opponentId,
                         origin,
                         now.plus(RoomDeadline.ROOM_EXPIRY_DURATION),
-                        now));
+                        now)
+        );
     }
 
-    /** L'invité refuse le défi (idempotent) : la salle se termine. */
+    /**
+     * L'invité refuse le défi (idempotent) : la salle se termine.
+     */
     @CommandHandler
     public void handle(RoomCommand.DeclineRoomInvitationCommand command) {
         requireInvitee(command.playerId());
@@ -156,7 +176,16 @@ public class RoomAggregate {
         }
         requireInvitation();
         logger.info("Invitation declined: roomId={}, opponentId={}", roomId, opponentId);
-        apply(new RoomEvent.RoomDeclinedEvent(roomId, topicId, initiatorId, opponentId, origin, Instant.now()));
+        apply(
+                new RoomEvent.RoomDeclinedEvent(
+                        roomId,
+                        topicId,
+                        initiatorId,
+                        opponentId,
+                        origin,
+                        Instant.now()
+                )
+        );
     }
 
     /**
@@ -326,7 +355,9 @@ public class RoomAggregate {
                 RoomReminderRules.nextReminderAt(stage, now));
     }
 
-    /** L'initiateur annule la salle, y compris pendant l'invitation ou la préparation. */
+    /**
+     * L'initiateur annule la salle, y compris pendant l'invitation ou la préparation.
+     */
     @CommandHandler
     public void handle(RoomCommand.CancelRoomCommand command) {
         if (isClosed()) {
@@ -340,7 +371,9 @@ public class RoomAggregate {
                         roomId, initiatorId, command.reason(), roomPlayers(), Instant.now()));
     }
 
-    /** Commande interne (saga) : les profils sont résolus ; avance la préparation (monotone). */
+    /**
+     * Commande interne (saga) : les profils sont résolus ; avance la préparation (monotone).
+     */
     @CommandHandler
     public void handle(RoomCommand.MarkRoomPlayersLoadedCommand command) {
         if (status != RoomStatus.FETCHING_PLAYERS) {
@@ -350,7 +383,9 @@ public class RoomAggregate {
         apply(new RoomEvent.RoomPlayersLoadedEvent(roomId, Instant.now()));
     }
 
-    /** Commande interne (saga) : l'historique des questions jouées est résolu (joutio-game). */
+    /**
+     * Commande interne (saga) : l'historique des questions jouées est résolu (joutio-game).
+     */
     @CommandHandler
     public void handle(RoomCommand.MarkRoomPlayedQuestionsLoadedCommand command) {
         if (status != RoomStatus.FETCHING_PLAYED_QUESTIONS) {
@@ -374,7 +409,9 @@ public class RoomAggregate {
         apply(new RoomEvent.RoomQuestionsLoadedEvent(roomId, command.questions(), Instant.now()));
     }
 
-    /** Commande interne (saga) : le service game a accusé la création de la partie. */
+    /**
+     * Commande interne (saga) : le service game a accusé la création de la partie.
+     */
     @CommandHandler
     public void handle(RoomCommand.MarkRoomGameCreatedCommand command) {
         if (status != RoomStatus.CREATING_GAME) {
@@ -385,7 +422,9 @@ public class RoomAggregate {
         apply(new RoomEvent.RoomGameCreatedEvent(roomId, command.gameId(), Instant.now()));
     }
 
-    /** Succès : la partie a été créée et accusée ; la salle reste lisible jusqu'à sa purge. */
+    /**
+     * Succès : la partie a été créée et accusée ; la salle reste lisible jusqu'à sa purge.
+     */
     @CommandHandler
     public void handle(RoomCommand.CompleteRoomCommand command) {
         requireGameId(command.gameId(), roomId);
@@ -415,7 +454,9 @@ public class RoomAggregate {
         apply(new RoomEvent.RoomFailedEvent(roomId, command.reason(), Instant.now()));
     }
 
-    /** Échéance de l'étape en cours ; une deadline antérieure à l'échéance (étape changée depuis) est ignorée. */
+    /**
+     * Échéance de l'étape en cours ; une deadline antérieure à l'échéance (étape changée depuis) est ignorée.
+     */
     @CommandHandler
     public void handle(RoomCommand.ExpireRoomCommand command) {
         Instant now = Instant.now();
@@ -485,7 +526,9 @@ public class RoomAggregate {
         }
     }
 
-    /** Présence temps réel d'un participant connu (initiateur ou second enregistré). */
+    /**
+     * Présence temps réel d'un participant connu (initiateur ou second enregistré).
+     */
     private boolean isPresent(String playerId) {
         return playerId.equals(initiatorId) ? initiatorPresent : participantPresent;
     }
@@ -509,7 +552,9 @@ public class RoomAggregate {
         return playerId.equals(initiatorId) ? initiatorPresenceId : participantPresenceId;
     }
 
-    /** Une nouvelle session reprend la présence d'un joueur déjà présent, tant que la salle attend. */
+    /**
+     * Une nouvelle session reprend la présence d'un joueur déjà présent, tant que la salle attend.
+     */
     private boolean takesOverPresence(String playerId, String presenceId) {
         return presenceId != null
                 && status == RoomStatus.WAITING_PLAYERS
@@ -659,7 +704,9 @@ public class RoomAggregate {
         topicAvailabilityConfirmed = true;
     }
 
-    /** Joueurs humains du salon (sans le bot), dans l'ordre, pour les événements de présence. */
+    /**
+     * Joueurs humains du salon (sans le bot), dans l'ordre, pour les événements de présence.
+     */
     private static Set<String> humanPlayers(String... ids) {
         Set<String> players = new LinkedHashSet<>();
         for (String id : ids) {
